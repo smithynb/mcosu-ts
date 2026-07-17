@@ -1,11 +1,10 @@
 import './style.css'
 
 import {
-  OsuDatabaseVersionError,
   parseOsuDatabase,
   type BeatmapEntry,
-  type OsuDatabaseResult,
 } from './data/OsuDatabase'
+import { scanRawSongs } from './data/RawSongsLibrary'
 import {
   isFileSystemAccessSupported,
   reconnectOsuFolder,
@@ -29,7 +28,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <section class="intro" aria-labelledby="page-title">
       <p class="eyebrow">osu!stable database reader</p>
       <h1 id="page-title">Your beatmaps.<br><span>Still on your disk.</span></h1>
-      <p class="lede">Choose the osu! installation folder that contains <code>osu!.db</code>. Files stay in your browser and are never uploaded.</p>
+      <p class="lede">Choose the osu! installation folder that contains <code>osu!.db</code> and <code>Songs</code>. Files stay in your browser and are never uploaded.</p>
       <button id="select-folder" class="primary-action" type="button">Select osu! folder</button>
       <p id="status" class="status" role="status" aria-live="polite">Checking for a previously selected folder…</p>
     </section>
@@ -62,7 +61,7 @@ const countLine = requireElement<HTMLParagraphElement>('count')
 const renderNote = requireElement<HTMLParagraphElement>('render-note')
 const songList = requireElement<HTMLDivElement>('song-list')
 
-let database: OsuDatabaseResult | null = null
+let beatmaps: BeatmapEntry[] | null = null
 
 selectButton.addEventListener('click', () => void chooseFolder())
 searchInput.addEventListener('input', renderLibrary)
@@ -80,7 +79,7 @@ async function reconnectOnLoad(): Promise<void> {
     const result = await reconnectOsuFolder(false)
     if (result.fileSystem !== null) {
       setStatus(`Reconnected to “${result.fileSystem.root.name}”. Reading osu!.db…`)
-      await loadDatabase(result.fileSystem)
+      await loadLibrary(result.fileSystem)
       return
     }
     if (result.hasStoredHandle && result.permission === 'prompt') {
@@ -104,7 +103,7 @@ async function chooseFolder(): Promise<void> {
     const restored = await reconnectOsuFolder(true)
     const fileSystem = restored.fileSystem ?? (await selectOsuFolder())
     setStatus(`Reading osu!.db from “${fileSystem.root.name}”…`)
-    await loadDatabase(fileSystem)
+    await loadLibrary(fileSystem)
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       setStatus('No folder selected. Your existing library has not changed.')
@@ -116,35 +115,62 @@ async function chooseFolder(): Promise<void> {
   }
 }
 
-async function loadDatabase(fileSystem: OsuFileSystem): Promise<void> {
-  if (!(await fileSystem.exists('osu!.db'))) {
-    database = null
-    library.hidden = true
-    throw new Error('No osu!.db was found in that folder. Select the osu! installation root, not its Songs folder.')
+async function loadLibrary(fileSystem: OsuFileSystem): Promise<void> {
+  let databaseFailure: string | null = null
+  if (await fileSystem.exists('osu!.db')) {
+    try {
+      const file = await fileSystem.getFile('osu!.db')
+      const database = parseOsuDatabase(await file.arrayBuffer())
+      publishLibrary(database.beatmaps)
+      setStatus(
+        `Loaded ${formatNumber(database.beatmaps.length)} osu!standard beatmaps from database version ${database.version}.`,
+        'success',
+      )
+      return
+    } catch (error) {
+      databaseFailure = messageForError(error)
+    }
+  } else {
+    databaseFailure = 'osu!.db is missing'
   }
 
-  const file = await fileSystem.getFile('osu!.db')
-  database = parseOsuDatabase(await file.arrayBuffer())
+  setStatus(`${databaseFailure}. Falling back to a raw Songs scan…`)
+  try {
+    const result = await scanRawSongs(fileSystem, ({ scannedFolders, totalFolders }) => {
+      setStatus(`Scanning ${formatNumber(scannedFolders)}/${formatNumber(totalFolders)} Songs folders…`)
+    })
+    publishLibrary(result.beatmaps)
+    const skipped = result.skippedFolders + result.skippedFiles
+    const skipNote = skipped === 0 ? '' : ` Skipped ${formatNumber(skipped)} unreadable items.`
+    setStatus(
+      `Loaded ${formatNumber(result.beatmaps.length)} osu!standard beatmaps from ${formatNumber(result.folderCount)} Songs folders.${skipNote}`,
+      'success',
+    )
+  } catch (error) {
+    beatmaps = null
+    library.hidden = true
+    throw new Error(`${databaseFailure}. Raw Songs scan also failed: ${messageForError(error)}`)
+  }
+}
+
+function publishLibrary(entries: BeatmapEntry[]): void {
+  beatmaps = entries
   searchInput.value = ''
   library.hidden = false
-  setStatus(
-    `Loaded ${formatNumber(database.beatmaps.length)} osu!standard beatmaps from database version ${database.version}.`,
-    'success',
-  )
   renderLibrary()
 }
 
 function renderLibrary(): void {
-  if (database === null) return
+  if (beatmaps === null) return
   const query = searchInput.value.trim().toLocaleLowerCase()
   const matches = query.length === 0
-    ? database.beatmaps
-    : database.beatmaps.filter((entry) => searchableText(entry).includes(query))
+    ? beatmaps
+    : beatmaps.filter((entry) => searchableText(entry).includes(query))
   const visible = matches.slice(0, MAX_RENDERED_ROWS)
 
   countLine.textContent = query.length === 0
     ? `${formatNumber(matches.length)} standard beatmaps`
-    : `${formatNumber(matches.length)} of ${formatNumber(database.beatmaps.length)} standard beatmaps`
+    : `${formatNumber(matches.length)} of ${formatNumber(beatmaps.length)} standard beatmaps`
   renderNote.textContent = matches.length > MAX_RENDERED_ROWS
     ? `Showing the first ${formatNumber(MAX_RENDERED_ROWS)}. Refine the filter to narrow the list.`
     : ''
@@ -198,7 +224,6 @@ function setStatus(message: string, state: 'neutral' | 'success' | 'error' = 'ne
 }
 
 function messageForError(error: unknown): string {
-  if (error instanceof OsuDatabaseVersionError) return error.message
   if (error instanceof Error) return error.message
   return 'The osu! database could not be read.'
 }

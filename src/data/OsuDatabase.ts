@@ -1,7 +1,7 @@
-import { OsuFile, OsuFileFormatError } from './OsuFile'
+import { OsuFile, OsuFileFormatError } from './OsuFile.ts'
 
 export const MINIMUM_OSU_DATABASE_VERSION = 20170222
-export const MAXIMUM_OSU_DATABASE_VERSION = 20191114
+export const STAR_RATING_FLOAT_VERSION = 20250108
 
 export interface BeatmapEntry {
   readonly artist: string
@@ -73,22 +73,33 @@ export function parseOsuDatabase(buffer: ArrayBuffer): OsuDatabaseResult {
     )
   }
 
-  // Mirrors `osu_database_version` and fallbackToRawLoad at
-  // OsuDatabase.cpp:52-54 and 1389-1397. A future raw .osu crawler can catch
-  // this error and provide the same fallback in Phase 2.
-  if (version > MAXIMUM_OSU_DATABASE_VERSION) {
-    throw new OsuDatabaseVersionError(
-      version,
-      `osu!.db version ${version} is newer than McOsu's safe ${MAXIMUM_OSU_DATABASE_VERSION} ceiling. This spike cannot safely parse it yet; raw Songs-folder fallback is not implemented.`,
-      true,
-    )
-  }
-
   const beatmaps: BeatmapEntry[] = []
   for (let index = 0; index < declaredBeatmapCount; index += 1) {
-    const entry = readBeatmapEntry(db, version)
+    const entryOffset = db.offset
+    let entry: BeatmapEntry
+    try {
+      entry = readBeatmapEntry(db, version)
+      validateEntry(entry, index, entryOffset)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new OsuFileFormatError(
+        `osu!.db entry ${index + 1}/${declaredBeatmapCount} is misaligned or corrupt: ${reason}`,
+        entryOffset,
+      )
+    }
     if (entry.mode !== 0 || isBlankEntry(entry)) continue
     beatmaps.push(entry)
+  }
+
+  // The osu! format documents one trailing Int32 permissions value. McOsu
+  // ignores it because it stops after the entry loop. Accept exactly that
+  // trailer or no trailer, but reject any other remainder as layout drift.
+  if (db.remaining === 4) db.skip(4)
+  if (db.remaining !== 0) {
+    throw new OsuFileFormatError(
+      `Unexpected ${db.remaining} trailing bytes after ${declaredBeatmapCount} beatmap entries; the database layout may have changed`,
+      db.offset,
+    )
   }
 
   return { version, folderCount, playerName, declaredBeatmapCount, beatmaps }
@@ -116,9 +127,8 @@ function readBeatmapEntry(db: OsuFile, version: number): BeatmapEntry {
   const od = db.readFloat()
   db.skip(8) // slider multiplier
 
-  // Four independent mode blocks must always be consumed. McOsu's current
-  // source also gates the rating value at 20250108 (double -> float), but its
-  // safe database ceiling above makes that branch intentionally unreachable.
+  // Four independent mode blocks must always be consumed. Stable changed each
+  // rating value from a double to a float in database version 20250108.
   const starRating = readStarRatings(db, version, true)
   readStarRatings(db, version, false) // taiko
   readStarRatings(db, version, false) // catch
@@ -182,11 +192,14 @@ function readStarRatings(db: OsuFile, version: number, keepNoMod: boolean): numb
     }
     const mods = db.readInt()
     const ratingType = db.readByte()
-    const expectedType = version >= 20250108 ? 0x0d : 0x0d
-    if (ratingType !== expectedType) {
+    const expectedRatingType = version >= STAR_RATING_FLOAT_VERSION ? 0x0c : 0x0d
+    if (ratingType !== expectedRatingType) {
       throw new OsuFileFormatError(`Expected floating-point star-rating object, received 0x${ratingType.toString(16)}`, db.offset - 1)
     }
-    const rating = version >= 20250108 ? db.readFloat() : db.readDouble()
+    const rating = version >= STAR_RATING_FLOAT_VERSION ? db.readFloat() : db.readDouble()
+    if (!Number.isFinite(rating) || rating < 0 || rating > 100) {
+      throw new OsuFileFormatError(`Invalid star rating ${rating}`, db.offset)
+    }
     if (keepNoMod && mods === 0) noModRating = rating
   }
 
@@ -200,6 +213,17 @@ function readCount(db: OsuFile, label: string, maximum: number): number {
     throw new OsuFileFormatError(`Invalid ${label}: ${count}`, offset)
   }
   return count
+}
+
+function validateEntry(entry: BeatmapEntry, index: number, offset: number): void {
+  if (!Number.isInteger(entry.mode) || entry.mode < 0 || entry.mode > 3) {
+    throw new OsuFileFormatError(`Invalid game mode ${entry.mode} in entry ${index + 1}`, offset)
+  }
+  for (const [label, value] of [['AR', entry.ar], ['CS', entry.cs], ['HP', entry.hp], ['OD', entry.od]] as const) {
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      throw new OsuFileFormatError(`Invalid ${label} value ${value} in entry ${index + 1}`, offset)
+    }
+  }
 }
 
 function normalizeDatabasePath(path: string): string {

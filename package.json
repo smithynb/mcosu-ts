@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:db": "node --experimental-strip-types --test tests/OsuFile.test.ts"
+    "test:db": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "devDependencies": {
     "typescript": "6.0.3",

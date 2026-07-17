@@ -1,6 +1,6 @@
 # mcosu-ts
 
-`mcosu-ts` is a browser-first TypeScript spike for reading an existing osu!stable song library. It asks you to select the osu! installation folder, reads its legacy `osu!.db` locally, and displays a searchable list of osu!standard beatmaps. No files are uploaded.
+`mcosu-ts` is a browser-first TypeScript spike for reading an existing osu!stable song library. It asks you to select the osu! installation folder, reads `osu!.db` locally, and displays a searchable list of osu!standard beatmaps. If the database is missing or unusable, it automatically scans metadata from `Songs/*/*.osu`. No files are uploaded.
 
 ## Browser support
 
@@ -21,16 +21,18 @@ npm run test:db
 
 The build and database-reader tests are deterministic and require no network access after dependencies are installed.
 
-## Database scope and known format boundaries
+## Database formats and raw fallback
 
-Phase 1 deliberately accepts only legacy `osu!.db` versions `20170222` through `20191114`, matching McOsu's conservative supported range. Earlier databases are rejected with an update prompt. Later databases are rejected instead of guessing at layout changes; a future Songs-folder crawler can provide the raw-file fallback used by McOsu.
+Phase 1 accepts `osu!.db` versions from `20170222` onward. Earlier databases are rejected with an update prompt and fall back to scanning the Songs directory. Each database entry is sanity-checked, and the parser accepts either no trailer or the documented four-byte permissions trailer; unexpected bytes abort database loading and trigger the raw fallback rather than displaying shifted garbage.
 
 The parser follows McOsu's field order and consumes all four mode star-rating blocks before returning only mode `0` (osu!standard) entries. Two upstream format details are notably ambiguous or easy to implement incorrectly:
 
 - Stable stopped prefixing beatmap entries with a byte size at version `20191107`. McOsu explicitly uses that date, while noting that the osu! wiki revision says `20191106`.
-- McOsu switches star-rating values from 64-bit doubles to 32-bit floats at version `20250108`. That branch is intentionally unreachable under this spike's `20191114` ceiling. Supporting current databases requires validating the complete post-2019 layout, not only changing this one field width.
+- McOsu switches star-rating values from 64-bit doubles to 32-bit floats at version `20250108`. The official format also changes the pair tag from `0x0d` (Int–Double) to `0x0c` (Int–Float), while McOsu reads and discards that tag without validating it.
 
 The database stores beatmap folder paths in Windows form in some installations, including nested paths with backslashes. These are normalized to slash-delimited paths for browser traversal. Timing points are treated as two little-endian doubles followed by one byte, as implemented by McOsu's `OsuFile::readTimingPoint`.
+
+The raw fallback reads only `[General]`, `[Metadata]`, and `[Difficulty]` from `.osu` files and stops before hit objects. It scans one Songs folder at a time so the UI can report progress. Raw entries do not calculate MD5 hashes, durations, or star ratings; those values are empty, zero, and unavailable respectively.
 
 ## Provenance and license
 
