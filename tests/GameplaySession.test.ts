@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { GameplaySession, SLIDER_END_INSIDE_CHECK_OFFSET_MS, SLIDER_FOLLOW_RADIUS_MULTIPLIER } from '../src/core/GameplaySession.ts'
+import { GameplaySession } from '../src/core/GameplaySession.ts'
+import { osuSliderEndInsideCheckOffset, osuSliderFollowCircleSizeMultiplier } from '../src/core/ConVars.ts'
 import type { GameplayBeatmap, GameplayCircle, GameplayObject, GameplaySlider, GameplaySpinner } from '../src/data/GameplayLoader.ts'
 
 const BASE = {
@@ -55,8 +56,8 @@ test('stable-default notelock blocks a later circle until the earliest unhit obj
 })
 
 test('slider tracking re-enters at circle radius, retains 2.4x, and samples tail 36ms early', () => {
-  assert.equal(SLIDER_FOLLOW_RADIUS_MULTIPLIER, 2.4)
-  assert.equal(SLIDER_END_INSIDE_CHECK_OFFSET_MS, 36)
+  assert.equal(osuSliderFollowCircleSizeMultiplier.getFloat(), 2.4)
+  assert.equal(osuSliderEndInsideCheckOffset.getInt(), 36)
   const slider = makeSlider()
   const session = new GameplaySession(makeBeatmap([slider]))
   session.update(1_000, {

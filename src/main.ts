@@ -13,6 +13,8 @@ import {
   type OsuFileSystem,
 } from './fs/osuFileSystem'
 import { PlayerPanel } from './ui/PlayerPanel'
+import { ConsoleOverlay } from './ui/ConsoleOverlay'
+import { convars } from './core/ConVars'
 
 const MAX_RENDERED_ROWS = 400
 
@@ -23,7 +25,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="pulse" aria-hidden="true"></span>
         <span>mcosu</span><span class="wordmark-suffix">.ts</span>
       </div>
-      <p class="phase">passive playfield / phase 03a</p>
+      <p class="phase">gameplay configuration / phase 04a</p>
     </header>
 
     <section class="intro" aria-labelledby="page-title">
@@ -64,6 +66,7 @@ const countLine = requireElement<HTMLParagraphElement>('count')
 const renderNote = requireElement<HTMLParagraphElement>('render-note')
 const songList = requireElement<HTMLDivElement>('song-list')
 const playerPanel = new PlayerPanel(requireElement<HTMLElement>('player-panel'))
+new ConsoleOverlay(convars)
 
 let beatmaps: BeatmapEntry[] | null = null
 let activeFileSystem: OsuFileSystem | null = null

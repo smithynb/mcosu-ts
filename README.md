@@ -16,10 +16,30 @@ Requires a current Node.js release supported by Vite 8.
 npm install
 npm run dev
 npm run build
-npm run test:db
+npm test
 ```
 
-The build and database-reader tests are deterministic and require no network access after dependencies are installed.
+The build and Node-only rules/database tests are deterministic and require no network access after dependencies are installed. `npm run test:db` remains an alias for the full suite.
+
+### ConVars
+
+Gameplay constants live in `src/core/ConVars.ts` as typed McOsu-style ConVars. Register a value through the shared registry and retain the returned object:
+
+```ts
+export const osuExample = convars.register({
+  name: 'osu_example',
+  kind: 'float',
+  defaultValue: 1,
+  description: 'Shown by the in-app console.',
+})
+
+osuExample.getFloat()
+osuExample.onChange((value, previous) => updateLiveState(value, previous))
+```
+
+Supported kinds are `float`, `int`, `bool`, and `string`; every ConVar also exposes `getFloat`, `getInt`, `getBool`, `getString`, `setValue`, and `reset`. Non-default values are persisted together in localStorage and restored as modules register at boot.
+
+Press backtick in the app to open the console. Use `help`, `find <substring>`, `<name>` to inspect a variable, `<name> <value>` to change it, or `reset <name>`. Up/down navigates command history and Tab completes registry prefixes.
 
 ## Database formats and raw fallback
 

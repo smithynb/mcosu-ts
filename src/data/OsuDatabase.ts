@@ -21,6 +21,8 @@ export interface BeatmapEntry {
   readonly starRating?: number
   readonly length: number
   readonly mode: number
+  /** Signed local beatmap offset stored in osu!.db, in milliseconds. */
+  readonly localOffset: number
 }
 
 export interface OsuDatabaseResult {
@@ -147,7 +149,8 @@ function readBeatmapEntry(db: OsuFile, version: number): BeatmapEntry {
 
   db.skip(4 + 4 + 4) // beatmap id, set id, thread id
   db.skip(4) // grades for standard, taiko, catch, mania
-  db.skip(2 + 4) // local offset, stack leniency
+  const localOffset = db.readShort()
+  db.skip(4) // stack leniency (the authoritative value is also in the .osu file)
   const mode = db.readByte()
   db.skipString() // source
   db.skipString() // tags
@@ -174,6 +177,7 @@ function readBeatmapEntry(db: OsuFile, version: number): BeatmapEntry {
     ...(starRating === undefined ? {} : { starRating }),
     length,
     mode,
+    localOffset,
   }
 }
 

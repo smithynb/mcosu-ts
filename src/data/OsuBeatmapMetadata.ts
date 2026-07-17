@@ -58,6 +58,7 @@ export function parseOsuBeatmapMetadata(
     od,
     length: 0,
     mode,
+    localOffset: 0,
   }
 }
 

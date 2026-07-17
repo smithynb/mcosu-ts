@@ -119,6 +119,7 @@ for (const version of [20170222, 20191114, 20250108, 20251231]) {
       starRating: 5.25,
       length: 123_456,
       mode: 0,
+      localOffset: 0,
     })
   })
 }

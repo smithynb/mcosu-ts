@@ -68,6 +68,7 @@ export type GameplayObject = GameplayCircle | GameplaySlider | GameplaySpinner
 
 export interface GameplayBeatmap {
   readonly fileVersion: number
+  readonly stackLeniency: number
   readonly approachRate: number
   readonly circleSize: number
   readonly overallDifficulty: number
@@ -192,6 +193,7 @@ export function parseGameplayBeatmap(text: string): GameplayBeatmap {
 
   return {
     fileVersion: decoded.fileFormat,
+    stackLeniency: decoded.general.stackLeniency,
     approachRate: decoded.difficulty.approachRate,
     circleSize: decoded.difficulty.circleSize,
     overallDifficulty: decoded.difficulty.overallDifficulty,

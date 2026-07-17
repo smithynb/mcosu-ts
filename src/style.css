@@ -30,6 +30,69 @@ body {
     #10121a;
 }
 
+.console-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  padding: 18px;
+  background: rgb(0 0 0 / 0.42);
+}
+
+.console-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(980px, 100%);
+  height: min(560px, 72vh);
+  margin: 0 auto;
+  border: 1px solid #565a6c;
+  background: rgb(8 10 15 / 0.97);
+  box-shadow: 0 30px 100px rgb(0 0 0 / 0.72);
+}
+
+.console-window header {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--beat-soft);
+  font: 0.75rem "SFMono-Regular", Consolas, monospace;
+}
+
+.console-window header span { color: var(--quiet); }
+
+.console-output {
+  overflow: auto;
+  padding: 12px 14px;
+}
+
+.console-output pre {
+  margin: 0 0 7px;
+  color: #c9c7d2;
+  font: 0.75rem/1.5 "SFMono-Regular", Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.console-output pre[data-kind="command"] { color: var(--beat-soft); }
+.console-output pre[data-kind="error"] { color: var(--error); }
+
+.console-window label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 9px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--rule);
+  color: var(--beat);
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.console-input {
+  border: 0;
+  outline: 0;
+  color: #fff;
+  background: transparent;
+  font-family: inherit;
+}
+
 button,
 input,
 select {
@@ -261,6 +324,10 @@ code {
   justify-content: space-between;
   padding: 22px 0;
 }
+
+.mod-select { border: 1px solid var(--rule); border-radius: 12px; padding: .7rem 1rem; }
+.mod-select > div { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .45rem; }
+.mod-select button[aria-pressed="true"] { color: var(--ink); border-color: var(--beat); background: color-mix(in srgb, var(--beat) 22%, transparent); }
 
 .speed-keys {
   display: flex;

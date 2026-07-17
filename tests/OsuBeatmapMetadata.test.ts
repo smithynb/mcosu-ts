@@ -41,6 +41,7 @@ test('parses lightweight standard metadata and preserves colons and embedded sla
     od: 8,
     length: 0,
     mode: 0,
+    localOffset: 0,
   })
 })
 

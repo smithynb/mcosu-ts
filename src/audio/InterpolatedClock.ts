@@ -44,10 +44,16 @@ export class InterpolatedClock {
     const wasSeekFrame = this.#wasSeekFrame
     this.#wasSeekFrame = false
 
-    // OsuBeatmap.cpp:2352-2353 bypasses all interpolation while loading.
-    if (isLoading) return rawPosition
-
     const realTime = this.#now()
+    // OsuBeatmap.cpp:2352-2353 bypasses all interpolation while loading.
+    // Synchronize state too, so toggling the ConVar cannot create a stale jump.
+    if (isLoading || !osuInterpolateMusicPos.getBool()) {
+      this.#interpolatedPosition = rawPosition
+      this.#lastAccurateAudioTime = realTime
+      this.#lastRealTime = realTime
+      return rawPosition
+    }
+
     const speed = this.#source.getSpeed()
 
     // OsuBeatmap.cpp:2360-2376, non-SDL path: multiplier 1.0, a 1500 ms
@@ -161,3 +167,4 @@ export class BeatmapClock {
     return this.#interpolated.update(isLoading)
   }
 }
+import { osuInterpolateMusicPos } from '../core/ConVars.ts'

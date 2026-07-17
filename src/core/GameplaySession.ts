@@ -2,10 +2,15 @@ import { hitWindowsMS, rawCircleRadius, spinnerRequiredRotations, type Point } f
 import { createSliderCurve, type SliderCurve } from './SliderCurves.ts'
 import { Score, type HitResult, type ScoreSnapshot } from './Score.ts'
 import type { GameplayBeatmap, GameplayObject, GameplaySlider } from '../data/GameplayLoader.ts'
+import type { ModdedGameplayBeatmap } from './Mods.ts'
+import {
+  osuNoteBlocking,
+  osuNotelockStableTolerance2B,
+  osuNotelockType,
+  osuSliderEndInsideCheckOffset,
+  osuSliderFollowCircleSizeMultiplier,
+} from './ConVars.ts'
 
-export const SLIDER_FOLLOW_RADIUS_MULTIPLIER = 2.4
-export const SLIDER_END_INSIDE_CHECK_OFFSET_MS = 36
-export const STABLE_NOTELOCK_2B_TOLERANCE_MS = 3
 
 export interface GameplayClick {
   readonly musicTime: number
@@ -97,7 +102,6 @@ export class GameplaySession {
   readonly #states: ObjectState[]
   readonly #score: Score
   readonly #radius: number
-  readonly #windows: ReturnType<typeof hitWindowsMS>
   readonly #autoplay: boolean
   #speedMultiplier: number
   #previousPositionMS = Number.NEGATIVE_INFINITY
@@ -105,10 +109,9 @@ export class GameplaySession {
 
   constructor(beatmap: GameplayBeatmap, options: { autoplay?: boolean; speedMultiplier?: number } = {}) {
     this.#beatmap = beatmap
-    this.#autoplay = options.autoplay ?? false
+    this.#autoplay = (options.autoplay ?? false) || (beatmap as Partial<ModdedGameplayBeatmap>).mods?.Auto === true
     this.#speedMultiplier = options.speedMultiplier ?? 1
     this.#radius = rawCircleRadius(beatmap.circleSize)
-    this.#windows = hitWindowsMS(beatmap.overallDifficulty)
     this.#score = new Score({
       circleSize: beatmap.circleSize,
       drainRate: beatmap.drainRate,
@@ -116,6 +119,7 @@ export class GameplaySession {
       objectCount: beatmap.objects.length,
       playableLengthMS: beatmap.playableLengthMS,
       breakLengthMS: beatmap.breakLengthMS,
+      modMultiplier: (beatmap as Partial<ModdedGameplayBeatmap>).scoreMultiplier,
     })
     this.#states = beatmap.objects.map((object) => this.#createState(object))
   }
@@ -134,11 +138,11 @@ export class GameplaySession {
       // OsuBeatmap.cpp:682-728, default osu!stable notelock. Spinners are
       // transparent; circles and unhit slider heads block later objects.
       const blocked = blockNextNotes
-      if (!this.#isFinished(state) && state.kind !== 'spinner') {
+      if (osuNoteBlocking.getBool() && osuNotelockType.getInt() !== 0 && !this.#isFinished(state) && state.kind !== 'spinner') {
         blockNextNotes = true
         if (state.kind === 'slider' && object.kind === 'slider' && state.headResult !== null) {
           const next = this.#beatmap.objects[index + 1]
-          if (next !== undefined && next.time <= object.endTime + STABLE_NOTELOCK_2B_TOLERANCE_MS) {
+          if (next !== undefined && next.time <= object.endTime + osuNotelockStableTolerance2B.getInt()) {
             blockNextNotes = false
           }
         }
@@ -149,7 +153,7 @@ export class GameplaySession {
       if (state.kind === 'circle' && state.result !== null) blockNextNotes = false
       if (state.kind === 'slider' && object.kind === 'slider' && sliderHeadBefore === null && state.headResult !== null) {
         const next = this.#beatmap.objects[index + 1]
-        if (next !== undefined && next.time <= object.endTime + STABLE_NOTELOCK_2B_TOLERANCE_MS) {
+        if (next !== undefined && next.time <= object.endTime + osuNotelockStableTolerance2B.getInt()) {
           blockNextNotes = false
         }
       }
@@ -253,6 +257,10 @@ export class GameplaySession {
     }
   }
 
+  get #windows(): ReturnType<typeof hitWindowsMS> {
+    return hitWindowsMS(this.#beatmap.overallDifficulty)
+  }
+
   #updateSlider(
     index: number,
     slider: GameplaySlider,
@@ -278,14 +286,14 @@ export class GameplaySession {
     const ball = state.curve.getPointAt(progress)
     // OsuSlider.cpp:1509-1514 and OsuGameRules.cpp:35. Re-enter within one
     // circle radius; once retained, the follow radius is 2.4 circle radii.
-    const followRadius = state.cursorLeft ? this.#radius : this.#radius * SLIDER_FOLLOW_RADIUS_MULTIPLIER
+    const followRadius = state.cursorLeft ? this.#radius : this.#radius * osuSliderFollowCircleSizeMultiplier.getFloat()
     const cursorInside = distance(input.position, ball) < followRadius
     state.cursorLeft = !cursorInside
     const tracking = clickHeld && cursorInside
 
     const tailCheckTime = Math.max(
       slider.time + (slider.endTime - slider.time) / 2,
-      slider.endTime - SLIDER_END_INSIDE_CHECK_OFFSET_MS,
+      slider.endTime - osuSliderEndInsideCheckOffset.getInt(),
     )
     // OsuSlider.cpp:1636-1665: latch the first frame at/after the check time.
     if (!state.tailCheckFinished && positionMS >= tailCheckTime) {

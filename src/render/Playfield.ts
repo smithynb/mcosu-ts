@@ -12,6 +12,8 @@ import type { HitResult } from '../core/Score.ts'
 import type { GameplayBeatmap, GameplayCircle, GameplaySlider } from '../data/GameplayLoader.ts'
 import { DEFAULT_COMBO_COLORS, type LoadedSkin, type SkinFrame } from '../skin/Skin.ts'
 import { createSliderBodyRenderer, type SliderBodyRenderer } from './SliderRenderer.ts'
+import { osuShowApproachCircleOnFirstHiddenObject, osuSliderFollowCircleSizeMultiplier, osuSnakingSliders } from '../core/ConVars.ts'
+import { hiddenAlpha, type ModdedGameplayBeatmap } from '../core/Mods.ts'
 
 export interface PlayfieldRenderer {
   render(positionMS: number, gameplay?: GameplayRenderState): void
@@ -90,7 +92,7 @@ export class CanvasPlayfield implements PlayfieldRenderer {
       if (object.time > positionMS + approachMS) break
       const endTime = object.kind === 'circle' ? object.time : object.endTime
       if (positionMS < object.time - approachMS || positionMS >= endTime) continue
-      const alpha = fadeInProgress(positionMS, object.time, approachMS)
+      const alpha = this.#alpha(positionMS, object.time, approachMS)
       const color = this.#comboColor(object.comboColorIndex)
       if (object.kind === 'slider') this.#drawSliderBody(object, positionMS, approachMS, transform, radius, color, alpha)
       if (object.kind === 'spinner') this.#drawSpinner(transform.center, radius, alpha)
@@ -104,11 +106,12 @@ export class CanvasPlayfield implements PlayfieldRenderer {
       if (gameplay?.snapshot.objectResults[index] !== null && object.kind === 'circle') continue
       const endTime = object.kind === 'slider' ? object.endTime : object.time
       if (positionMS < object.time - approachMS || positionMS >= endTime) continue
-      const alpha = fadeInProgress(positionMS, object.time, approachMS)
+      const alpha = this.#alpha(positionMS, object.time, approachMS)
+      const showApproach = !this.#hidden || (index === 0 && osuShowApproachCircleOnFirstHiddenObject.getBool())
       if (object.kind === 'slider') {
-        this.#drawSliderFurniture(object, positionMS, approachMS, transform, radius, alpha)
+        this.#drawSliderFurniture(object, positionMS, approachMS, transform, radius, alpha, showApproach)
       } else {
-        this.#drawCircle(object, positionMS, approachMS, transform, radius, alpha)
+        this.#drawCircle(object, positionMS, approachMS, transform, radius, alpha, showApproach)
       }
     }
     if (gameplay !== undefined) this.#drawGameplayOverlay(positionMS, transform, radius, gameplay)
@@ -130,7 +133,7 @@ export class CanvasPlayfield implements PlayfieldRenderer {
   ): void {
     const curve = this.#sliderCurves.get(slider)
     if (curve === undefined) return
-    const snake = sliderSnakePercent(positionMS, slider.time, approachMS)
+    const snake = osuSnakingSliders.getBool() ? sliderSnakePercent(positionMS, slider.time, approachMS) : 1
     let points = this.#sliderPixelPoints.get(slider)
     if (points === undefined) {
       points = curve.equalDistancePoints.map((point) => osuCoords2Pixels(point, transform))
@@ -157,10 +160,11 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     transform: ReturnType<typeof getPlayfieldTransform>,
     radius: number,
     alpha: number,
+    showApproach: boolean,
   ): void {
     const curve = this.#sliderCurves.get(slider)
     if (curve === undefined) return
-    const snake = sliderSnakePercent(positionMS, slider.time, approachMS)
+    const snake = osuSnakingSliders.getBool() ? sliderSnakePercent(positionMS, slider.time, approachMS) : 1
     const color = this.#comboColor(slider.comboColorIndex)
     const start = osuCoords2Pixels(curve.getPointAt(0), transform)
     const visibleEnd = osuCoords2Pixels(curve.getPointAt(snake), transform)
@@ -179,7 +183,7 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     this.#drawSliderEndpoint(visibleEnd, false, radius, color, positionMS)
     this.#drawSliderEndpoint(start, true, radius, color, positionMS, positionMS < slider.time ? slider.comboNumber : undefined)
 
-    if (positionMS < slider.time) {
+    if (showApproach && positionMS < slider.time) {
       const timeUntilHit = Math.max(0, slider.time - positionMS)
       const approachScale = 1 + 3 * (timeUntilHit / approachMS)
       this.#drawApproachCircle(start, radius, approachScale, color, positionMS)
@@ -259,7 +263,7 @@ export class CanvasPlayfield implements PlayfieldRenderer {
 
   #drawFollowCircle(center: Point, radius: number, color: string, positionMS: number): void {
     const frame = this.#skin?.frame(this.#skin.sliderFollowCircle, positionMS)
-    const diameter = radius * 2 * 2.4 * 0.85
+    const diameter = radius * 2 * osuSliderFollowCircleSizeMultiplier.getFloat() * 0.85
     if (frame !== undefined) drawFrame(this.#context, frame, center, diameter)
     else {
       this.#context.strokeStyle = color
@@ -285,6 +289,7 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     transform: ReturnType<typeof getPlayfieldTransform>,
     radius: number,
     alpha: number,
+    showApproach: boolean,
   ): void {
     const center = osuCoords2Pixels(object.position, transform)
     const color = this.#comboColor(object.comboColorIndex)
@@ -294,7 +299,9 @@ export class CanvasPlayfield implements PlayfieldRenderer {
 
     this.#context.save()
     this.#context.globalAlpha = alpha
-    if (approachFrame !== undefined) {
+    if (!showApproach) {
+      // Hidden suppresses approach circles except for the configured first object.
+    } else if (approachFrame !== undefined) {
       drawFrame(this.#context, approachFrame, center, radius * 2 * approachScale)
     } else {
       this.#context.strokeStyle = color
@@ -468,6 +475,16 @@ export class CanvasPlayfield implements PlayfieldRenderer {
   #comboColor(index: number): string {
     const colors = this.#skin?.config.comboColors ?? DEFAULT_COMBO_COLORS
     return colors[((index % colors.length) + colors.length) % colors.length]!
+  }
+
+  get #hidden(): boolean {
+    return (this.#beatmap as Partial<ModdedGameplayBeatmap>).mods?.HD === true
+  }
+
+  #alpha(positionMS: number, objectTimeMS: number, approachMS: number): number {
+    return this.#hidden
+      ? hiddenAlpha(positionMS, objectTimeMS, approachMS)
+      : fadeInProgress(positionMS, objectTimeMS, approachMS)
   }
 
   #resizeCanvas(): { width: number; height: number } {

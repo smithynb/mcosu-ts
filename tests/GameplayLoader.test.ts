@@ -6,6 +6,7 @@ const SYNTHETIC_OSU = `osu file format v14
 
 [General]
 Mode:0
+StackLeniency:0.6
 
 [Difficulty]
 HPDrainRate:6
@@ -34,8 +35,9 @@ test('decodes hit objects into a parser-independent gameplay boundary', () => {
       hp: beatmap.drainRate,
       counts: [beatmap.circles.length, beatmap.sliders.length, beatmap.spinners.length],
       playableLengthMS: beatmap.playableLengthMS,
+      stackLeniency: beatmap.stackLeniency,
     },
-    { ar: 9, cs: 4, od: 8, hp: 6, counts: [1, 1, 1], playableLengthMS: 3_000 },
+    { ar: 9, cs: 4, od: 8, hp: 6, counts: [1, 1, 1], playableLengthMS: 3_000, stackLeniency: 0.6 },
   )
 
   assert.deepEqual(beatmap.circles[0], {

@@ -6,6 +6,15 @@ import type { BeatmapEntry } from '../data/OsuDatabase.ts'
 import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
 import { listSkinNames, loadSkin } from '../skin/Skin.ts'
 import { PlayfieldView } from './PlayfieldView.ts'
+import {
+  applyDifficultyMods,
+  modPitchPreserved,
+  modSpeed,
+  musicPositionWithOffsets,
+  NO_MODS,
+  scoreMultiplier,
+  type GameplayMod,
+} from '../core/Mods.ts'
 
 interface JitterSample {
   readonly at: number
@@ -28,6 +37,8 @@ export class PlayerPanel {
   readonly #skinSelect: HTMLSelectElement
   readonly #watchButton: HTMLButtonElement
   readonly #gameplayButton: HTMLButtonElement
+  readonly #modButtons: HTMLButtonElement[]
+  readonly #modMultiplier: HTMLOutputElement
   readonly #rawReadout: HTMLOutputElement
   readonly #interpolatedReadout: HTMLOutputElement
   readonly #stateReadout: HTMLOutputElement
@@ -45,6 +56,7 @@ export class PlayerPanel {
   #beatmap: BeatmapEntry | null = null
   #fileSystem: OsuFileSystem | null = null
   #speed = 1
+  #mods: Record<GameplayMod, boolean> = { ...NO_MODS }
 
   constructor(root: HTMLElement) {
     this.#root = root
@@ -97,6 +109,12 @@ export class PlayerPanel {
         </div>
       </div>
 
+      <fieldset class="mod-select">
+        <legend>Gameplay mods</legend>
+        <div>${['NF', 'EZ', 'HD', 'HR', 'DT', 'NC', 'HT', 'Auto'].map((mod) => `<button type="button" data-mod="${mod}" aria-pressed="false">${mod}</button>`).join('')}</div>
+        <small>score multiplier <output id="mod-multiplier">1.00×</output></small>
+      </fieldset>
+
       <div class="clock-console" aria-label="Gameplay clock diagnostics">
         <div class="clock-channel clock-channel-raw">
           <span>raw audio</span>
@@ -130,6 +148,8 @@ export class PlayerPanel {
     this.#skinSelect = element(root, 'skin-select')
     this.#watchButton = element(root, 'watch-beatmap')
     this.#gameplayButton = element(root, 'play-beatmap')
+    this.#modButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-mod]'))
+    this.#modMultiplier = element(root, 'mod-multiplier')
     this.#rawReadout = element(root, 'raw-position')
     this.#interpolatedReadout = element(root, 'interpolated-position')
     this.#stateReadout = element(root, 'clock-state')
@@ -147,6 +167,9 @@ export class PlayerPanel {
     }
     this.#watchButton.addEventListener('click', () => void this.#openGameplay('watch'))
     this.#gameplayButton.addEventListener('click', () => void this.#openGameplay('play'))
+    for (const button of this.#modButtons) {
+      button.addEventListener('click', () => this.#toggleMod(button.dataset.mod as GameplayMod))
+    }
   }
 
   async open(beatmap: BeatmapEntry, fileSystem: OsuFileSystem): Promise<void> {
@@ -203,7 +226,11 @@ export class PlayerPanel {
     this.#gameplayButton.disabled = true
     this.#setStatus('Decoding gameplay objects…')
     try {
-      const gameplay = await loadGameplayBeatmap(fileSystem, beatmap)
+      const gameplay = applyDifficultyMods(await loadGameplayBeatmap(fileSystem, beatmap), this.#mods)
+      const speed = modSpeed(this.#mods)
+      this.#pitchToggle.checked = modPitchPreserved(this.#mods)
+      this.#player?.setPitchPreserved(this.#pitchToggle.checked)
+      this.#setSpeed(speed)
       let skin = null
       const skinName = this.#skinSelect.value
       if (skinName.length > 0) {
@@ -310,7 +337,8 @@ export class PlayerPanel {
       this.#setStatus('Audio ended; virtual clock continuing past length.')
     }
     const interpolatedPosition = clock.update()
-    this.#playfieldView.render(interpolatedPosition, now, this.#speed)
+    const judgmentPosition = musicPositionWithOffsets(interpolatedPosition, this.#speed, this.#beatmap?.localOffset ?? 0)
+    this.#playfieldView.render(judgmentPosition, now, this.#speed)
 
     this.#rawReadout.value = rawPosition.toFixed(3)
     this.#interpolatedReadout.value = interpolatedPosition.toFixed(3)
@@ -356,6 +384,27 @@ export class PlayerPanel {
     this.#gameplayButton.disabled = !enabled
     const fieldset = this.#root.querySelector<HTMLFieldSetElement>('.speed-keys')
     if (fieldset !== null) fieldset.disabled = !enabled
+    const mods = this.#root.querySelector<HTMLFieldSetElement>('.mod-select')
+    if (mods !== null) mods.disabled = !enabled
+  }
+
+  #toggleMod(mod: GameplayMod): void {
+    this.#mods[mod] = !this.#mods[mod]
+    if (this.#mods[mod]) {
+      if (mod === 'EZ') this.#mods.HR = false
+      if (mod === 'HR') this.#mods.EZ = false
+      if (mod === 'DT' || mod === 'NC' || mod === 'HT') {
+        for (const peer of ['DT', 'NC', 'HT'] as const) if (peer !== mod) this.#mods[peer] = false
+      }
+    }
+    for (const button of this.#modButtons) {
+      button.setAttribute('aria-pressed', String(this.#mods[button.dataset.mod as GameplayMod]))
+    }
+    this.#modMultiplier.value = `${scoreMultiplier(this.#mods).toFixed(2)}×`
+    const speed = modSpeed(this.#mods)
+    this.#pitchToggle.checked = modPitchPreserved(this.#mods)
+    this.#player?.setPitchPreserved(this.#pitchToggle.checked)
+    this.#setSpeed(speed)
   }
 
   #setStatus(message: string, error = false): void {

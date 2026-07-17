@@ -1,15 +1,25 @@
+import {
+  osuApproachTimeMax,
+  osuApproachTimeMid,
+  osuApproachTimeMin,
+  osuHitWindow100Max,
+  osuHitWindow100Mid,
+  osuHitWindow100Min,
+  osuHitWindow300Max,
+  osuHitWindow300Mid,
+  osuHitWindow300Min,
+  osuHitWindow50Max,
+  osuHitWindow50Mid,
+  osuHitWindow50Min,
+  osuHitWindowMiss,
+} from './ConVars.ts'
+
 export const OSU_COORD_WIDTH = 512
 export const OSU_COORD_HEIGHT = 384
 
 export const PLAYFIELD_BORDER_TOP_PERCENT = 0.117
 export const PLAYFIELD_BORDER_BOTTOM_PERCENT = 0.0834
 export const HITOBJECT_FADE_IN_MS = 400
-export const HIT_WINDOW_MISS_MS = 400
-
-const APPROACH_TIME = [1_800, 1_200, 450] as const
-const HIT_WINDOW_300 = [80, 50, 20] as const
-const HIT_WINDOW_100 = [140, 100, 60] as const
-const HIT_WINDOW_50 = [200, 150, 100] as const
 const BROKEN_GAMEFIELD_ROUNDING_ALLOWANCE = 1.00041
 
 export interface Point {
@@ -33,7 +43,12 @@ export function mapDifficultyRange(value: number, min: number, mid: number, max:
 
 // Defaults from OsuGameRules.cpp:49-52; mapping in OsuGameRules.h:230-233.
 export function approachTimeMS(approachRate: number): number {
-  return mapDifficultyRange(approachRate, ...APPROACH_TIME)
+  return mapDifficultyRange(
+    approachRate,
+    osuApproachTimeMin.getFloat(),
+    osuApproachTimeMid.getFloat(),
+    osuApproachTimeMax.getFloat(),
+  )
 }
 
 // Defaults from OsuGameRules.cpp:54-66; mapping in OsuGameRules.h:251-284.
@@ -44,10 +59,10 @@ export function hitWindowsMS(overallDifficulty: number): Readonly<{
   miss: number
 }> {
   return {
-    hit300: mapDifficultyRange(overallDifficulty, ...HIT_WINDOW_300),
-    hit100: mapDifficultyRange(overallDifficulty, ...HIT_WINDOW_100),
-    hit50: mapDifficultyRange(overallDifficulty, ...HIT_WINDOW_50),
-    miss: HIT_WINDOW_MISS_MS,
+    hit300: mapDifficultyRange(overallDifficulty, osuHitWindow300Min.getFloat(), osuHitWindow300Mid.getFloat(), osuHitWindow300Max.getFloat()),
+    hit100: mapDifficultyRange(overallDifficulty, osuHitWindow100Min.getFloat(), osuHitWindow100Mid.getFloat(), osuHitWindow100Max.getFloat()),
+    hit50: mapDifficultyRange(overallDifficulty, osuHitWindow50Min.getFloat(), osuHitWindow50Mid.getFloat(), osuHitWindow50Max.getFloat()),
+    miss: osuHitWindowMiss.getFloat(),
   }
 }
 
