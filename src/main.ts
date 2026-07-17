@@ -23,7 +23,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="pulse" aria-hidden="true"></span>
         <span>mcosu</span><span class="wordmark-suffix">.ts</span>
       </div>
-      <p class="phase">local library / phase 01</p>
+      <p class="phase">passive playfield / phase 03a</p>
     </header>
 
     <section class="intro" aria-labelledby="page-title">

@@ -31,12 +31,14 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 3px solid rgb(233 103 161 / 0.38);
   outline-offset: 3px;
 }
@@ -321,6 +323,126 @@ code {
   font-size: 0.62rem;
 }
 
+.watch-options {
+  display: flex;
+  gap: 14px;
+  align-items: end;
+  justify-content: flex-end;
+  padding: 0 0 22px;
+}
+
+.watch-options label {
+  display: grid;
+  gap: 7px;
+  min-width: min(320px, 100%);
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.watch-options select {
+  height: 40px;
+  padding: 0 36px 0 12px;
+  border: 1px solid #393b49;
+  border-radius: 3px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.watch-button,
+.playfield-toolbar button {
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--beat);
+  border-radius: 3px;
+  color: var(--ink);
+  background: rgb(233 103 161 / 0.13);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.watch-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.playfield-overlay {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+  padding: clamp(14px, 2.5vw, 30px);
+  background: rgb(5 6 10 / 0.97);
+  backdrop-filter: blur(12px);
+}
+
+.playfield-toolbar {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1280px, 100%);
+  margin: 0 auto;
+}
+
+.playfield-toolbar h2 {
+  overflow: hidden;
+  max-width: min(70vw, 900px);
+  margin: 5px 0 0;
+  font-size: clamp(1rem, 2vw, 1.45rem);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playfield-toolbar-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.watch-speed {
+  display: flex;
+  gap: 5px;
+}
+
+.watch-speed button {
+  height: 34px;
+  padding: 0 10px;
+  border-color: #393b49;
+  background: #141620;
+  font-size: 0.72rem;
+}
+
+.watch-speed button[aria-pressed="true"] {
+  border-color: var(--beat);
+  background: rgb(233 103 161 / 0.18);
+}
+
+.playfield-toolbar output {
+  color: var(--beat-soft);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.playfield-letterbox {
+  align-self: center;
+  width: min(1280px, 100%, calc((100vh - 126px) * 4 / 3));
+  aspect-ratio: 4 / 3;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #292c39;
+  background: #070910;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 0.5);
+}
+
+.playfield-letterbox canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .clock-console {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -578,6 +700,23 @@ code {
   .player-heading,
   .playback-options {
     display: grid;
+  }
+
+  .watch-options {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .watch-options label {
+    min-width: 0;
+  }
+
+  .playfield-toolbar output {
+    display: none;
+  }
+
+  .watch-speed button {
+    padding-inline: 7px;
   }
 
   .player-status {

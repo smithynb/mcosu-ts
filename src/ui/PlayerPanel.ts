@@ -1,7 +1,10 @@
 import { BeatmapClock, BeatmapClockState, InterpolatedClock } from '../audio/InterpolatedClock.ts'
 import { MusicPlayer } from '../audio/MusicPlayer.ts'
+import { loadGameplayBeatmap } from '../data/GameplayLoader.ts'
 import type { BeatmapEntry } from '../data/OsuDatabase.ts'
 import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import { listSkinNames, loadSkin } from '../skin/Skin.ts'
+import { PlayfieldView } from './PlayfieldView.ts'
 
 interface JitterSample {
   readonly at: number
@@ -21,12 +24,15 @@ export class PlayerPanel {
   readonly #duration: HTMLOutputElement
   readonly #pitchToggle: HTMLInputElement
   readonly #speedButtons: HTMLButtonElement[]
+  readonly #skinSelect: HTMLSelectElement
+  readonly #watchButton: HTMLButtonElement
   readonly #rawReadout: HTMLOutputElement
   readonly #interpolatedReadout: HTMLOutputElement
   readonly #stateReadout: HTMLOutputElement
   readonly #jitterMin: HTMLOutputElement
   readonly #jitterMax: HTMLOutputElement
   readonly #jitterStdDev: HTMLOutputElement
+  readonly #playfieldView: PlayfieldView
   #player: MusicPlayer | null = null
   #interpolatedClock: InterpolatedClock | null = null
   #beatmapClock: BeatmapClock | null = null
@@ -34,9 +40,12 @@ export class PlayerPanel {
   #loadGeneration = 0
   #jitterSamples: JitterSample[] = []
   #lastInterpolatedPosition: number | null = null
+  #beatmap: BeatmapEntry | null = null
+  #fileSystem: OsuFileSystem | null = null
 
   constructor(root: HTMLElement) {
     this.#root = root
+    this.#playfieldView = new PlayfieldView((speed) => this.#setSpeed(speed))
     root.innerHTML = `
       <div class="player-heading">
         <div>
@@ -72,6 +81,16 @@ export class PlayerPanel {
         </label>
       </div>
 
+      <div class="watch-options">
+        <label for="skin-select">
+          <span>Skin</span>
+          <select id="skin-select" disabled>
+            <option value="">Procedural fallback</option>
+          </select>
+        </label>
+        <button id="watch-beatmap" class="watch-button" type="button" disabled>Watch</button>
+      </div>
+
       <div class="clock-console" aria-label="Gameplay clock diagnostics">
         <div class="clock-channel clock-channel-raw">
           <span>raw audio</span>
@@ -102,6 +121,8 @@ export class PlayerPanel {
     this.#duration = element(root, 'player-duration')
     this.#pitchToggle = element(root, 'pitch-preserved')
     this.#speedButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-speed]'))
+    this.#skinSelect = element(root, 'skin-select')
+    this.#watchButton = element(root, 'watch-beatmap')
     this.#rawReadout = element(root, 'raw-position')
     this.#interpolatedReadout = element(root, 'interpolated-position')
     this.#stateReadout = element(root, 'clock-state')
@@ -117,11 +138,14 @@ export class PlayerPanel {
     for (const button of this.#speedButtons) {
       button.addEventListener('click', () => this.#setSpeed(Number(button.dataset.speed)))
     }
+    this.#watchButton.addEventListener('click', () => void this.#watchBeatmap())
   }
 
   async open(beatmap: BeatmapEntry, fileSystem: OsuFileSystem): Promise<void> {
     const generation = ++this.#loadGeneration
     this.#releasePlayer()
+    this.#beatmap = beatmap
+    this.#fileSystem = fileSystem
     this.#root.hidden = false
     this.#title.textContent = `${beatmap.artist} — ${beatmap.title} [${beatmap.difficultyName}]`
     this.#setStatus(`Loading ${beatmap.audioFile || 'beatmap audio'}…`)
@@ -148,9 +172,53 @@ export class PlayerPanel {
       this.#setStatus('Ready. Press Play to start the clock.')
       this.#resetJitter()
       this.#renderFrame()
+      void this.#loadSkinChoices(fileSystem, generation)
     } catch (error) {
       if (generation !== this.#loadGeneration) return
       this.#setStatus(error instanceof Error ? error.message : 'Could not load beatmap audio.', true)
+    }
+  }
+
+  async #loadSkinChoices(fileSystem: OsuFileSystem, generation: number): Promise<void> {
+    const names = await listSkinNames(fileSystem)
+    if (generation !== this.#loadGeneration) return
+    this.#skinSelect.replaceChildren(option('', 'Procedural fallback'))
+    for (const name of names) this.#skinSelect.append(option(name, name))
+  }
+
+  async #watchBeatmap(): Promise<void> {
+    const beatmap = this.#beatmap
+    const fileSystem = this.#fileSystem
+    if (beatmap === null || fileSystem === null) return
+
+    this.#watchButton.disabled = true
+    this.#setStatus('Decoding gameplay objects…')
+    try {
+      const gameplay = await loadGameplayBeatmap(fileSystem, beatmap)
+      let skin = null
+      const skinName = this.#skinSelect.value
+      if (skinName.length > 0) {
+        this.#setStatus(`Loading skin “${skinName}”…`)
+        try {
+          skin = await loadSkin(fileSystem, skinName)
+        } catch {
+          // Missing or malformed skin elements are intentionally non-fatal.
+        }
+      }
+      this.#playfieldView.open(
+        gameplay,
+        skin,
+        `${beatmap.artist} — ${beatmap.title} [${beatmap.difficultyName}]`,
+      )
+      this.#setStatus(
+        skinName.length > 0 && skin === null
+          ? `Skin “${skinName}” was unusable; watching with procedural graphics.`
+          : 'Playfield ready. Playback controls continue to drive the watch clock.',
+      )
+    } catch (error) {
+      this.#setStatus(error instanceof Error ? error.message : 'Could not load gameplay objects.', true)
+    } finally {
+      this.#watchButton.disabled = this.#player === null
     }
   }
 
@@ -196,6 +264,7 @@ export class PlayerPanel {
     for (const button of this.#speedButtons) {
       button.setAttribute('aria-pressed', String(Number(button.dataset.speed) === speed))
     }
+    this.#playfieldView.setSpeed(speed)
     this.#resetJitter()
   }
 
@@ -218,6 +287,7 @@ export class PlayerPanel {
       this.#setStatus('Audio ended; virtual clock continuing past length.')
     }
     const interpolatedPosition = clock.update()
+    this.#playfieldView.render(interpolatedPosition)
 
     this.#rawReadout.value = rawPosition.toFixed(3)
     this.#interpolatedReadout.value = interpolatedPosition.toFixed(3)
@@ -258,6 +328,8 @@ export class PlayerPanel {
     this.#playButton.disabled = !enabled
     this.#seek.disabled = !enabled
     this.#pitchToggle.disabled = !enabled
+    this.#skinSelect.disabled = !enabled
+    this.#watchButton.disabled = !enabled
     const fieldset = this.#root.querySelector<HTMLFieldSetElement>('.speed-keys')
     if (fieldset !== null) fieldset.disabled = !enabled
   }
@@ -271,9 +343,13 @@ export class PlayerPanel {
     cancelAnimationFrame(this.#animationFrame)
     this.#animationFrame = 0
     this.#player?.dispose()
+    this.#playfieldView.close()
     this.#player = null
     this.#interpolatedClock = null
     this.#beatmapClock = null
+    this.#beatmap = null
+    this.#fileSystem = null
+    this.#skinSelect.replaceChildren(option('', 'Procedural fallback'))
     this.#playButton.textContent = 'Play'
     this.#seek.value = '0'
     this.#rawReadout.value = '0.000'
@@ -281,6 +357,13 @@ export class PlayerPanel {
     this.#stateReadout.value = BeatmapClockState.WAITING
     this.#resetJitter()
   }
+}
+
+function option(value: string, label: string): HTMLOptionElement {
+  const result = document.createElement('option')
+  result.value = value
+  result.textContent = label
+  return result
 }
 
 function element<T extends HTMLElement>(root: HTMLElement, id: string): T {
