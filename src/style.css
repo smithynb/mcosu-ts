@@ -348,6 +348,16 @@ code {
   background: var(--surface);
 }
 
+.gameplay-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.play-map-button {
+  color: #180d13;
+  background: var(--beat);
+}
+
 .watch-button,
 .playfield-toolbar button {
   height: 40px;
@@ -375,6 +385,18 @@ code {
   padding: clamp(14px, 2.5vw, 30px);
   background: rgb(5 6 10 / 0.97);
   backdrop-filter: blur(12px);
+}
+
+.mouse-input-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.mouse-input-toggle input {
+  accent-color: var(--beat);
 }
 
 .playfield-toolbar {
@@ -452,6 +474,52 @@ code {
 
 .playfield-sprite-layer {
   z-index: 1;
+  touch-action: none;
+  cursor: none;
+}
+
+.play-results {
+  position: fixed;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: min(520px, calc(100% - 40px));
+  padding: 30px;
+  border: 1px solid rgb(233 103 161 / 0.45);
+  background: rgb(13 15 22 / 0.94);
+  box-shadow: 0 30px 100px rgb(0 0 0 / 0.7);
+  transform: translate(-50%, -50%);
+}
+
+.play-results h3 {
+  margin: 8px 0 22px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(2rem, 8vw, 4.2rem);
+  letter-spacing: -0.06em;
+}
+
+.play-results dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 0;
+  background: var(--rule);
+}
+
+.play-results dl div {
+  padding: 14px;
+  background: var(--surface);
+}
+
+.play-results dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.play-results dd {
+  margin: 5px 0 0;
+  font-weight: 750;
 }
 
 .clock-console {

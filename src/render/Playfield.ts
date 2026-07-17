@@ -7,13 +7,25 @@ import {
   type Point,
 } from '../core/GameRules.ts'
 import { createSliderCurve, type SliderCurve } from '../core/SliderCurves.ts'
+import type { GameplaySnapshot, JudgmentEvent } from '../core/GameplaySession.ts'
+import type { HitResult } from '../core/Score.ts'
 import type { GameplayBeatmap, GameplayCircle, GameplaySlider } from '../data/GameplayLoader.ts'
 import { DEFAULT_COMBO_COLORS, type LoadedSkin, type SkinFrame } from '../skin/Skin.ts'
 import { createSliderBodyRenderer, type SliderBodyRenderer } from './SliderRenderer.ts'
 
 export interface PlayfieldRenderer {
-  render(positionMS: number): void
+  render(positionMS: number, gameplay?: GameplayRenderState): void
   dispose(): void
+}
+
+export interface GameplayRenderState {
+  readonly snapshot: GameplaySnapshot
+  readonly cursor: Point
+}
+
+interface ResultAnimation {
+  readonly event: JudgmentEvent
+  readonly startedAt: number
 }
 
 export class CanvasPlayfield implements PlayfieldRenderer {
@@ -24,7 +36,9 @@ export class CanvasPlayfield implements PlayfieldRenderer {
   readonly #sliderBodyRenderer: SliderBodyRenderer
   readonly #sliderCurves = new Map<GameplaySlider, SliderCurve>()
   readonly #sliderPixelPoints = new Map<GameplaySlider, readonly Point[]>()
+  readonly #resultAnimations: ResultAnimation[] = []
   #sliderTransformKey = ''
+  #lastPositionMS = Number.NEGATIVE_INFINITY
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -47,7 +61,14 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     }
   }
 
-  render(positionMS: number): void {
+  render(positionMS: number, gameplay?: GameplayRenderState): void {
+    if (positionMS + 5 < this.#lastPositionMS) this.#resultAnimations.length = 0
+    this.#lastPositionMS = positionMS
+    if (gameplay !== undefined) {
+      for (const event of gameplay.snapshot.events) {
+        if (event.type === 'judgment') this.#resultAnimations.push({ event, startedAt: positionMS })
+      }
+    }
     const { width, height } = this.#resizeCanvas()
     const context = this.#context
     context.setTransform(1, 0, 0, 1, 0, 0)
@@ -80,6 +101,7 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     for (let index = this.#beatmap.objects.length - 1; index >= 0; index -= 1) {
       const object = this.#beatmap.objects[index]!
       if (object.kind === 'spinner') continue
+      if (gameplay?.snapshot.objectResults[index] !== null && object.kind === 'circle') continue
       const endTime = object.kind === 'slider' ? object.endTime : object.time
       if (positionMS < object.time - approachMS || positionMS >= endTime) continue
       const alpha = fadeInProgress(positionMS, object.time, approachMS)
@@ -89,6 +111,7 @@ export class CanvasPlayfield implements PlayfieldRenderer {
         this.#drawCircle(object, positionMS, approachMS, transform, radius, alpha)
       }
     }
+    if (gameplay !== undefined) this.#drawGameplayOverlay(positionMS, transform, radius, gameplay)
   }
 
   dispose(): void {
@@ -345,6 +368,100 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     this.#context.textAlign = 'center'
     this.#context.textBaseline = 'middle'
     this.#context.fillText('SPIN', center.x, center.y)
+    this.#context.restore()
+  }
+
+  #drawGameplayOverlay(
+    positionMS: number,
+    transform: ReturnType<typeof getPlayfieldTransform>,
+    radius: number,
+    gameplay: GameplayRenderState,
+  ): void {
+    for (let index = this.#resultAnimations.length - 1; index >= 0; index -= 1) {
+      const animation = this.#resultAnimations[index]!
+      const elapsed = positionMS - animation.startedAt
+      if (elapsed >= 1_100) {
+        this.#resultAnimations.splice(index, 1)
+        continue
+      }
+      this.#drawResult(animation.event.result, osuCoords2Pixels(animation.event.position, transform), radius, elapsed, positionMS)
+    }
+
+    const score = gameplay.snapshot.score
+    this.#context.save()
+    this.#context.fillStyle = '#fff'
+    this.#context.textBaseline = 'bottom'
+    this.#context.shadowColor = 'rgba(0,0,0,.75)'
+    this.#context.shadowBlur = 8
+    const comboDrawn = this.#drawHudNumber(String(score.combo), 24, this.#canvas.clientHeight - 20, radius * 1.05, positionMS)
+    if (!comboDrawn) {
+      this.#context.font = `800 ${Math.max(24, radius * 1.05)}px Inter, sans-serif`
+      this.#context.textAlign = 'left'
+      this.#context.fillText(`${score.combo}×`, 24, this.#canvas.clientHeight - 20)
+    }
+    this.#context.font = `700 ${Math.max(17, radius * 0.58)}px Inter, sans-serif`
+    this.#context.textAlign = 'right'
+    this.#context.fillText(`${(score.accuracy * 100).toFixed(2)}%`, this.#canvas.clientWidth - 24, 42)
+    this.#context.font = `650 ${Math.max(12, radius * 0.4)}px Inter, sans-serif`
+    this.#context.fillText(String(score.score).padStart(8, '0'), this.#canvas.clientWidth - 24, 66)
+    this.#context.restore()
+
+    const cursor = osuCoords2Pixels(gameplay.cursor, transform)
+    const frame = this.#skin?.frame(this.#skin.cursor, positionMS)
+    if (frame !== undefined) {
+      const logicalWidth = frame.image.naturalWidth / frame.sourceScale
+      drawFrame(this.#context, frame, cursor, logicalWidth * transform.scale)
+    } else {
+      this.#context.save()
+      this.#context.strokeStyle = '#fff'
+      this.#context.lineWidth = 2
+      this.#context.beginPath()
+      this.#context.arc(cursor.x, cursor.y, Math.max(6, radius * 0.24), 0, Math.PI * 2)
+      this.#context.stroke()
+      this.#context.restore()
+    }
+  }
+
+  #drawHudNumber(text: string, x: number, baseline: number, height: number, positionMS: number): boolean {
+    const frames = Array.from(text, (digit) => this.#skin?.frame(this.#skin.scoreNumbers[Number(digit)], positionMS))
+    if (frames.length === 0 || !frames.every((frame): frame is SkinFrame => frame !== undefined)) return false
+    let cursorX = x
+    for (const frame of frames) {
+      const logicalWidth = frame.image.naturalWidth / frame.sourceScale
+      const logicalHeight = frame.image.naturalHeight / frame.sourceScale
+      const width = height * (logicalWidth / Math.max(1, logicalHeight))
+      this.#context.drawImage(frame.image, cursorX, baseline - height, width, height)
+      cursorX += width - height * 0.06
+    }
+    return true
+  }
+
+  #drawResult(result: HitResult, center: Point, radius: number, elapsed: number, positionMS: number): void {
+    // OsuHitObject.cpp:27-33, 97-132: 1.1s total, 120ms fade-in,
+    // fade-out begins at 500ms and lasts 600ms; misses enter at 2x scale.
+    const alpha = elapsed < 120 ? elapsed / 120 : clamp(1 - (elapsed - 500) / 600, 0, 1)
+    const scale = result === 'miss'
+      ? 1 + clamp(1 - elapsed / 120, 0, 1)
+      : 0.9 + 0.15 * clamp(elapsed / 1_100, 0, 1)
+    const down = result === 'miss' ? -5 + 45 * clamp((elapsed / 1_100) ** 3, 0, 1) : 0
+    const image = result === '300'
+      ? this.#skin?.hit300
+      : result === '100'
+        ? this.#skin?.hit100
+        : result === '50'
+          ? this.#skin?.hit50
+          : this.#skin?.hit0
+    const frame = this.#skin?.frame(image, positionMS)
+    this.#context.save()
+    this.#context.globalAlpha = alpha
+    if (frame !== undefined) drawFrame(this.#context, frame, { x: center.x, y: center.y + down }, radius * 2 * scale)
+    else {
+      this.#context.fillStyle = result === 'miss' ? '#ef4f62' : result === '50' ? '#f2c14e' : '#8fdcff'
+      this.#context.font = `900 ${Math.max(18, radius * scale)}px Inter, sans-serif`
+      this.#context.textAlign = 'center'
+      this.#context.textBaseline = 'middle'
+      this.#context.fillText(result === 'miss' ? '×' : result, center.x, center.y + down)
+    }
     this.#context.restore()
   }
 

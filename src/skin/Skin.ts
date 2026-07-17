@@ -28,7 +28,12 @@ export interface LoadedSkin {
   readonly hitcircleoverlay?: SkinImage
   readonly approachcircle?: SkinImage
   readonly numbers: readonly (SkinImage | undefined)[]
+  readonly scoreNumbers: readonly (SkinImage | undefined)[]
   readonly cursor?: SkinImage
+  readonly hit300?: SkinImage
+  readonly hit100?: SkinImage
+  readonly hit50?: SkinImage
+  readonly hit0?: SkinImage
   readonly sliderStartCircle?: SkinImage
   readonly sliderStartCircleOverlay?: SkinImage
   readonly sliderEndCircle?: SkinImage
@@ -139,6 +144,10 @@ export async function loadSkin(
     sliderBall,
     sliderFollowCircle,
     sliderScorePoint,
+    hit300,
+    hit100,
+    hit50,
+    hit0,
     ...numbers
   ] = await Promise.all([
     loadImage('hitcircle'),
@@ -153,8 +162,16 @@ export async function loadSkin(
     loadImage('sliderb'),
     loadImage('sliderfollowcircle'),
     loadImage('sliderscorepoint'),
+    loadImage('hit300'),
+    loadImage('hit100'),
+    loadImage('hit50'),
+    loadImage('hit0'),
     ...Array.from({ length: 10 }, (_, digit) => loadImage(`default-${digit}`)),
+    ...Array.from({ length: 10 }, (_, digit) => loadImage(`score-${digit}`)),
   ])
+
+  const defaultNumbers = numbers.slice(0, 10)
+  const scoreNumbers = numbers.slice(10, 20)
 
   return {
     name,
@@ -171,7 +188,12 @@ export async function loadSkin(
     sliderBall,
     sliderFollowCircle,
     sliderScorePoint,
-    numbers,
+    hit300,
+    hit100,
+    hit50,
+    hit0,
+    numbers: defaultNumbers,
+    scoreNumbers,
     frame(image, timeMS) {
       if (image === undefined || image.frames.length === 0) return undefined
       if (image.frames.length === 1 || config.animationFramerate <= 0) return image.frames[0]

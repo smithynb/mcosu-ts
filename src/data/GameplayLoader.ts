@@ -22,6 +22,16 @@ export interface GameplayCombo {
 interface GameplayObjectBase extends GameplayCombo {
   readonly time: number
   readonly position: GameplayPoint
+  readonly hitSound: number
+  readonly samples: readonly GameplaySample[]
+}
+
+export interface GameplaySample {
+  readonly sampleSet: string
+  readonly hitSound: string
+  readonly customIndex: number
+  readonly volume: number
+  readonly filename: string
 }
 
 export interface GameplayCircle extends GameplayObjectBase {
@@ -46,6 +56,7 @@ export interface GameplaySlider extends GameplayObjectBase {
   readonly absoluteControlPoints: readonly GameplayPoint[]
   readonly spanDuration: number
   readonly tickPercentages: readonly number[]
+  readonly nodeSamples: readonly (readonly GameplaySample[])[]
 }
 
 export interface GameplaySpinner extends GameplayObjectBase {
@@ -63,6 +74,8 @@ export interface GameplayBeatmap {
   readonly drainRate: number
   readonly sliderMultiplier: number
   readonly sliderTickRate: number
+  readonly playableLengthMS: number
+  readonly breakLengthMS: number
   readonly circles: readonly GameplayCircle[]
   readonly sliders: readonly GameplaySlider[]
   readonly spinners: readonly GameplaySpinner[]
@@ -112,6 +125,8 @@ export function parseGameplayBeatmap(text: string): GameplayBeatmap {
     const base = {
       time: object.startTime,
       position: { x: object.startPosition.x, y: object.startPosition.y },
+      hitSound: object.hitSound,
+      samples: object.samples.map((sample) => toGameplaySample(sample, decoded.controlPoints.samplePointAt(object.startTime))),
       newCombo,
       comboOffset,
       comboColorOffset: colorOffset,
@@ -150,6 +165,11 @@ export function parseGameplayBeatmap(text: string): GameplayBeatmap {
           baseBeatLength: timingPoint.beatLengthUnlimited,
           generateTicks: difficultyPoint.generateTicks,
         }),
+        nodeSamples: slider.nodeSamples.map((samples, nodeIndex) => {
+          const nodeTime = slider.startTime + nodeIndex * slider.spanDuration
+          const samplePoint = decoded.controlPoints.samplePointAt(nodeTime)
+          return samples.map((sample) => toGameplaySample(sample, samplePoint))
+        }),
       }
       sliders.push(gameplayObject)
       objects.push(gameplayObject)
@@ -178,9 +198,35 @@ export function parseGameplayBeatmap(text: string): GameplayBeatmap {
     drainRate: decoded.difficulty.drainRate,
     sliderMultiplier: decoded.difficulty.sliderMultiplier,
     sliderTickRate: decoded.difficulty.sliderTickRate,
+    // OsuBeatmap.cpp:1794-1799 defines playable length from first object start
+    // through the final object's end; OsuScore.cpp subtracts break duration.
+    playableLengthMS: objects.length === 0
+      ? 0
+      : objectEndTime(objects.at(-1)!) - objects[0]!.time,
+    breakLengthMS: decoded.events.breaks.reduce((total, event) => total + event.duration, 0),
     circles,
     sliders,
     spinners,
     objects,
+  }
+}
+
+function objectEndTime(object: GameplayObject): number {
+  return object.kind === 'circle' ? object.time : object.endTime
+}
+
+function toGameplaySample(sample: {
+  sampleSet: string
+  hitSound: string
+  customIndex: number
+  volume: number
+  filename: string
+}, fallback: { sampleSet: string; customIndex: number; volume: number }): GameplaySample {
+  return {
+    sampleSet: (sample.sampleSet.toLowerCase() === 'none' ? fallback.sampleSet : sample.sampleSet).toLowerCase(),
+    hitSound: sample.hitSound.toLowerCase(),
+    customIndex: sample.customIndex > 0 ? sample.customIndex : fallback.customIndex,
+    volume: sample.volume > 0 ? sample.volume : fallback.volume,
+    filename: sample.filename,
   }
 }

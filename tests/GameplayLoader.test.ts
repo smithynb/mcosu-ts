@@ -33,14 +33,17 @@ test('decodes hit objects into a parser-independent gameplay boundary', () => {
       od: beatmap.overallDifficulty,
       hp: beatmap.drainRate,
       counts: [beatmap.circles.length, beatmap.sliders.length, beatmap.spinners.length],
+      playableLengthMS: beatmap.playableLengthMS,
     },
-    { ar: 9, cs: 4, od: 8, hp: 6, counts: [1, 1, 1] },
+    { ar: 9, cs: 4, od: 8, hp: 6, counts: [1, 1, 1], playableLengthMS: 3_000 },
   )
 
   assert.deepEqual(beatmap.circles[0], {
     kind: 'circle',
     time: 1_000,
     position: { x: 64, y: 192 },
+    hitSound: 0,
+    samples: [{ sampleSet: 'soft', hitSound: 'normal', customIndex: 1, volume: 100, filename: '' }],
     newCombo: false,
     comboOffset: 0,
     comboColorOffset: 0,
@@ -74,5 +77,6 @@ test('decodes hit objects into a parser-independent gameplay boundary', () => {
   ])
   assert.ok(Math.abs(slider.spanDuration - (500 * 200) / (1.4 * 100)) < 1e-9)
   assert.deepEqual(slider.tickPercentages, [0.7])
+  assert.equal(slider.nodeSamples.length, 3)
   assert.equal(beatmap.spinners[0]?.endTime, 4_000)
 })

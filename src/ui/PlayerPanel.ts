@@ -1,5 +1,6 @@
 import { BeatmapClock, BeatmapClockState, InterpolatedClock } from '../audio/InterpolatedClock.ts'
 import { MusicPlayer } from '../audio/MusicPlayer.ts'
+import { HitSoundPlayer } from '../audio/HitSoundPlayer.ts'
 import { loadGameplayBeatmap } from '../data/GameplayLoader.ts'
 import type { BeatmapEntry } from '../data/OsuDatabase.ts'
 import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
@@ -26,6 +27,7 @@ export class PlayerPanel {
   readonly #speedButtons: HTMLButtonElement[]
   readonly #skinSelect: HTMLSelectElement
   readonly #watchButton: HTMLButtonElement
+  readonly #gameplayButton: HTMLButtonElement
   readonly #rawReadout: HTMLOutputElement
   readonly #interpolatedReadout: HTMLOutputElement
   readonly #stateReadout: HTMLOutputElement
@@ -42,6 +44,7 @@ export class PlayerPanel {
   #lastInterpolatedPosition: number | null = null
   #beatmap: BeatmapEntry | null = null
   #fileSystem: OsuFileSystem | null = null
+  #speed = 1
 
   constructor(root: HTMLElement) {
     this.#root = root
@@ -88,7 +91,10 @@ export class PlayerPanel {
             <option value="">Procedural fallback</option>
           </select>
         </label>
-        <button id="watch-beatmap" class="watch-button" type="button" disabled>Watch</button>
+        <div class="gameplay-actions">
+          <button id="play-beatmap" class="watch-button play-map-button" type="button" disabled>Play</button>
+          <button id="watch-beatmap" class="watch-button" type="button" disabled>Watch</button>
+        </div>
       </div>
 
       <div class="clock-console" aria-label="Gameplay clock diagnostics">
@@ -123,6 +129,7 @@ export class PlayerPanel {
     this.#speedButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-speed]'))
     this.#skinSelect = element(root, 'skin-select')
     this.#watchButton = element(root, 'watch-beatmap')
+    this.#gameplayButton = element(root, 'play-beatmap')
     this.#rawReadout = element(root, 'raw-position')
     this.#interpolatedReadout = element(root, 'interpolated-position')
     this.#stateReadout = element(root, 'clock-state')
@@ -138,7 +145,8 @@ export class PlayerPanel {
     for (const button of this.#speedButtons) {
       button.addEventListener('click', () => this.#setSpeed(Number(button.dataset.speed)))
     }
-    this.#watchButton.addEventListener('click', () => void this.#watchBeatmap())
+    this.#watchButton.addEventListener('click', () => void this.#openGameplay('watch'))
+    this.#gameplayButton.addEventListener('click', () => void this.#openGameplay('play'))
   }
 
   async open(beatmap: BeatmapEntry, fileSystem: OsuFileSystem): Promise<void> {
@@ -186,12 +194,13 @@ export class PlayerPanel {
     for (const name of names) this.#skinSelect.append(option(name, name))
   }
 
-  async #watchBeatmap(): Promise<void> {
+  async #openGameplay(mode: 'watch' | 'play'): Promise<void> {
     const beatmap = this.#beatmap
     const fileSystem = this.#fileSystem
     if (beatmap === null || fileSystem === null) return
 
     this.#watchButton.disabled = true
+    this.#gameplayButton.disabled = true
     this.#setStatus('Decoding gameplay objects…')
     try {
       const gameplay = await loadGameplayBeatmap(fileSystem, beatmap)
@@ -205,20 +214,33 @@ export class PlayerPanel {
           // Missing or malformed skin elements are intentionally non-fatal.
         }
       }
+      this.#setStatus('Preloading gameplay hitsounds…')
+      const hitSounds = await HitSoundPlayer.load(fileSystem, beatmap, gameplay, skinName)
       this.#playfieldView.open(
         gameplay,
         skin,
         `${beatmap.artist} — ${beatmap.title} [${beatmap.difficultyName}]`,
+        { mode, hitSounds },
       )
+      if (mode === 'play' && this.#player !== null && this.#beatmapClock !== null) {
+        this.#player.setPositionMS(0)
+        this.#beatmapClock.startPlaying()
+        await this.#player.play()
+        this.#playButton.textContent = 'Pause'
+      }
       this.#setStatus(
         skinName.length > 0 && skin === null
-          ? `Skin “${skinName}” was unusable; watching with procedural graphics.`
-          : 'Playfield ready. Playback controls continue to drive the watch clock.',
+          ? `Skin “${skinName}” was unusable; using procedural graphics.`
+          : mode === 'play'
+            ? 'Playfield live. Use Z/X or mouse buttons.'
+            : 'Autoplay ready. Playback controls continue to drive the watch clock.',
       )
     } catch (error) {
+      this.#playfieldView.close()
       this.#setStatus(error instanceof Error ? error.message : 'Could not load gameplay objects.', true)
     } finally {
       this.#watchButton.disabled = this.#player === null
+      this.#gameplayButton.disabled = this.#player === null
     }
   }
 
@@ -261,6 +283,7 @@ export class PlayerPanel {
   #setSpeed(speed: number): void {
     if (!Number.isFinite(speed)) return
     this.#player?.setSpeed(speed)
+    this.#speed = speed
     for (const button of this.#speedButtons) {
       button.setAttribute('aria-pressed', String(Number(button.dataset.speed) === speed))
     }
@@ -287,7 +310,7 @@ export class PlayerPanel {
       this.#setStatus('Audio ended; virtual clock continuing past length.')
     }
     const interpolatedPosition = clock.update()
-    this.#playfieldView.render(interpolatedPosition)
+    this.#playfieldView.render(interpolatedPosition, now, this.#speed)
 
     this.#rawReadout.value = rawPosition.toFixed(3)
     this.#interpolatedReadout.value = interpolatedPosition.toFixed(3)
@@ -330,6 +353,7 @@ export class PlayerPanel {
     this.#pitchToggle.disabled = !enabled
     this.#skinSelect.disabled = !enabled
     this.#watchButton.disabled = !enabled
+    this.#gameplayButton.disabled = !enabled
     const fieldset = this.#root.querySelector<HTMLFieldSetElement>('.speed-keys')
     if (fieldset !== null) fieldset.disabled = !enabled
   }
