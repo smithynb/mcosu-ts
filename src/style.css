@@ -155,6 +155,249 @@ code {
   color: var(--error);
 }
 
+.player-panel {
+  margin-bottom: 58px;
+  padding: 30px;
+  border: 1px solid #343644;
+  border-left: 3px solid var(--beat);
+  background:
+    linear-gradient(135deg, rgb(233 103 161 / 0.055), transparent 42%),
+    #141620;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.22);
+}
+
+.player-heading {
+  display: flex;
+  gap: 24px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.player-heading h2 {
+  max-width: 760px;
+  margin: 8px 0 0;
+  font-size: clamp(1.3rem, 3vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+
+.player-status {
+  max-width: 330px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.player-status[data-state="error"] {
+  color: var(--error);
+}
+
+.transport {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  margin-top: 28px;
+  padding: 22px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.transport-button {
+  width: 88px;
+  height: 48px;
+  border: 1px solid var(--beat);
+  border-radius: 3px;
+  color: #180d13;
+  background: var(--beat);
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.transport-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.seek-control {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  align-items: center;
+}
+
+.seek-control label {
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.seek-control input {
+  width: 100%;
+  accent-color: var(--beat);
+  cursor: pointer;
+}
+
+.time-scale {
+  display: flex;
+  grid-column: 2;
+  justify-content: space-between;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.67rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.playback-options {
+  display: flex;
+  gap: 28px;
+  align-items: end;
+  justify-content: space-between;
+  padding: 22px 0;
+}
+
+.speed-keys {
+  display: flex;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.speed-keys legend {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.speed-keys button {
+  min-width: 82px;
+  height: 38px;
+  border: 1px solid #393b49;
+  border-radius: 3px;
+  color: #c8c5d1;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.speed-keys button span {
+  color: var(--quiet);
+  font-size: 0.65rem;
+}
+
+.speed-keys button[aria-pressed="true"] {
+  border-color: var(--beat);
+  color: var(--ink);
+  background: rgb(233 103 161 / 0.12);
+}
+
+.speed-keys:disabled button {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pitch-switch {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 9px;
+  align-items: center;
+  color: #d5d2dc;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.pitch-switch input {
+  grid-row: 1 / 3;
+  accent-color: var(--beat);
+}
+
+.pitch-switch small {
+  color: var(--quiet);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.62rem;
+}
+
+.clock-console {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--rule);
+  background: #0d0f16;
+}
+
+.clock-channel {
+  display: grid;
+  min-width: 0;
+  padding: 22px 24px;
+}
+
+.clock-channel + .clock-channel {
+  border-left: 1px solid var(--rule);
+}
+
+.clock-channel > span,
+.jitter-console span {
+  color: var(--quiet);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.clock-channel output {
+  overflow: hidden;
+  margin: 8px 0 4px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(1.7rem, 4.7vw, 3.25rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: -0.055em;
+  text-overflow: ellipsis;
+}
+
+.clock-channel-interpolated output {
+  color: var(--beat-soft);
+}
+
+.clock-channel small {
+  color: var(--quiet);
+  font-size: 0.65rem;
+}
+
+.jitter-console {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr)) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 14px 17px;
+  border: 1px solid var(--rule);
+  border-top: 0;
+  color: var(--muted);
+  background: var(--surface);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.68rem;
+}
+
+.jitter-console p {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.jitter-console output {
+  color: #d5d2dc;
+  font-variant-numeric: tabular-nums;
+}
+
+.jitter-console > small {
+  color: var(--quiet);
+  text-align: right;
+}
+
 .library {
   border-top: 1px solid var(--rule);
 }
@@ -223,11 +466,17 @@ code {
   gap: 22px;
   align-items: center;
   min-height: 76px;
+  width: 100%;
   padding: 14px 19px 14px 21px;
+  border: 0;
   border-bottom: 1px solid var(--rule);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
-.song-row:last-child {
+.song-list > :last-child .song-row {
   border-bottom: 0;
 }
 
@@ -249,6 +498,7 @@ code {
 }
 
 .song-copy {
+  display: block;
   min-width: 0;
 }
 
@@ -259,6 +509,7 @@ code {
 }
 
 .song-title {
+  display: block;
   overflow: hidden;
   color: var(--ink);
   font-size: 0.94rem;
@@ -273,6 +524,7 @@ code {
 }
 
 .creator {
+  display: block;
   margin-top: 6px;
   overflow: hidden;
   color: var(--muted);
@@ -316,6 +568,64 @@ code {
 
   .library-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .player-panel {
+    margin-bottom: 42px;
+    padding: 20px 16px;
+  }
+
+  .player-heading,
+  .playback-options {
+    display: grid;
+  }
+
+  .player-status {
+    max-width: none;
+    text-align: left;
+  }
+
+  .transport {
+    grid-template-columns: 1fr;
+  }
+
+  .transport-button {
+    width: 100%;
+  }
+
+  .seek-control {
+    grid-template-columns: 1fr;
+  }
+
+  .time-scale {
+    grid-column: 1;
+  }
+
+  .speed-keys {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .speed-keys button {
+    min-width: 0;
+  }
+
+  .clock-console {
+    grid-template-columns: 1fr;
+  }
+
+  .clock-channel + .clock-channel {
+    border-top: 1px solid var(--rule);
+    border-left: 0;
+  }
+
+  .jitter-console {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .jitter-console > small {
+    grid-column: 1 / -1;
+    text-align: left;
   }
 
   .library-meta {

@@ -12,6 +12,7 @@ import {
   UNSUPPORTED_BROWSER_MESSAGE,
   type OsuFileSystem,
 } from './fs/osuFileSystem'
+import { PlayerPanel } from './ui/PlayerPanel'
 
 const MAX_RENDERED_ROWS = 400
 
@@ -32,6 +33,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <button id="select-folder" class="primary-action" type="button">Select osu! folder</button>
       <p id="status" class="status" role="status" aria-live="polite">Checking for a previously selected folder…</p>
     </section>
+
+    <section id="player-panel" class="player-panel" aria-labelledby="player-title" hidden></section>
 
     <section id="library" class="library" aria-labelledby="library-title" hidden>
       <div class="library-toolbar">
@@ -60,8 +63,10 @@ const searchInput = requireElement<HTMLInputElement>('search')
 const countLine = requireElement<HTMLParagraphElement>('count')
 const renderNote = requireElement<HTMLParagraphElement>('render-note')
 const songList = requireElement<HTMLDivElement>('song-list')
+const playerPanel = new PlayerPanel(requireElement<HTMLElement>('player-panel'))
 
 let beatmaps: BeatmapEntry[] | null = null
+let activeFileSystem: OsuFileSystem | null = null
 
 selectButton.addEventListener('click', () => void chooseFolder())
 searchInput.addEventListener('input', renderLibrary)
@@ -116,6 +121,7 @@ async function chooseFolder(): Promise<void> {
 }
 
 async function loadLibrary(fileSystem: OsuFileSystem): Promise<void> {
+  activeFileSystem = fileSystem
   let databaseFailure: string | null = null
   if (await fileSystem.exists('osu!.db')) {
     try {
@@ -185,11 +191,16 @@ function renderLibrary(): void {
 }
 
 function createSongRow(entry: BeatmapEntry): HTMLElement {
-  const row = document.createElement('article')
+  const item = document.createElement('div')
+  item.setAttribute('role', 'listitem')
+  const row = document.createElement('button')
+  row.type = 'button'
   row.className = 'song-row'
-  row.setAttribute('role', 'listitem')
+  row.addEventListener('click', () => {
+    if (activeFileSystem !== null) void playerPanel.open(entry, activeFileSystem)
+  })
 
-  const title = document.createElement('p')
+  const title = document.createElement('span')
   title.className = 'song-title'
   title.textContent = `${entry.artist} — ${entry.title}`
 
@@ -198,20 +209,21 @@ function createSongRow(entry: BeatmapEntry): HTMLElement {
   difficulty.textContent = `[${entry.difficultyName}]`
   title.append(' ', difficulty)
 
-  const creator = document.createElement('p')
+  const creator = document.createElement('span')
   creator.className = 'creator'
   creator.textContent = `mapped by ${entry.creator}`
 
-  const stars = document.createElement('p')
+  const stars = document.createElement('span')
   stars.className = 'stars'
   stars.textContent = entry.starRating === undefined ? '— ★' : `${entry.starRating.toFixed(2)} ★`
   stars.title = entry.starRating === undefined ? 'No no-mod star rating in osu!.db' : 'No-mod star rating'
 
-  const copy = document.createElement('div')
+  const copy = document.createElement('span')
   copy.className = 'song-copy'
   copy.append(title, creator)
   row.append(copy, stars)
-  return row
+  item.append(row)
+  return item
 }
 
 function searchableText(entry: BeatmapEntry): string {

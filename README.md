@@ -34,6 +34,14 @@ The database stores beatmap folder paths in Windows form in some installations, 
 
 The raw fallback reads only `[General]`, `[Metadata]`, and `[Difficulty]` from `.osu` files and stops before hit objects. It scans one Songs folder at a time so the UI can report progress. Raw entries do not calculate MD5 hashes, durations, or star ratings; those values are empty, zero, and unavailable respectively.
 
+## Audio and gameplay clock
+
+Select a beatmap row to open the playback laboratory. Audio is read from `Songs/<beatmap folder>/<AudioFilename>`, exposed to an `HTMLAudioElement` through a temporary Blob URL, and never uploaded. The URL is revoked when another beatmap is selected. Playback support depends on the browser's installed codecs; unsupported or corrupt audio is reported in the panel.
+
+The gameplay clock ports McOsu's non-SDL interpolation path from `OsuBeatmap.cpp:2350-2427`: a `1.0` interpolation multiplier, `11 ms` error limit for the first `1500 ms` after an accurate sample or whenever speed is below `1.0x`, otherwise `33 ms`, delta easing by `1/8`, snap beyond twice the active limit, `2x` undershoot advancement, and `0.5x` overshoot advancement. Seek/loading frames bypass interpolation. Waiting time is negative and speed-scaled; post-song virtual time continues from the decoded duration in unscaled real milliseconds.
+
+`preservesPitch` and its WebKit/Mozilla-prefixed variants are set together. At `1.5x`, preserved pitch behaves like DoubleTime; disabled pitch preservation behaves approximately like Nightcore. Unlike McOsu's sound backend, browser `currentTime` already reports media timeline time at `playbackRate`, so the backend-specific slow-speed pitch compensation of up to five milliseconds is not applied.
+
 ## Provenance and license
 
 The binary reader and database layout are TypeScript ports derived from [McOsu](https://github.com/McKay42/McOsu), with source regions cited in the implementation. McOsu is licensed under GPL-3.0.
