@@ -6,6 +6,8 @@ const MAX_ANIMATION_FRAMES = 512
 export interface SkinConfig {
   readonly comboColors: readonly string[]
   readonly animationFramerate: number
+  readonly sliderBorderColor: string
+  readonly sliderTrackOverride?: string
 }
 
 export interface SkinFrame {
@@ -27,6 +29,14 @@ export interface LoadedSkin {
   readonly approachcircle?: SkinImage
   readonly numbers: readonly (SkinImage | undefined)[]
   readonly cursor?: SkinImage
+  readonly sliderStartCircle?: SkinImage
+  readonly sliderStartCircleOverlay?: SkinImage
+  readonly sliderEndCircle?: SkinImage
+  readonly sliderEndCircleOverlay?: SkinImage
+  readonly reverseArrow?: SkinImage
+  readonly sliderBall?: SkinImage
+  readonly sliderFollowCircle?: SkinImage
+  readonly sliderScorePoint?: SkinImage
   frame(image: SkinImage | undefined, timeMS: number): SkinFrame | undefined
   dispose(): void
 }
@@ -35,6 +45,8 @@ export function parseSkinIni(text: string): SkinConfig {
   const comboColors: Array<{ index: number; color: string }> = []
   let section = ''
   let animationFramerate = 0
+  let sliderBorderColor = '#ffffff'
+  let sliderTrackOverride: string | undefined
 
   for (const rawLine of text.replace(/^\uFEFF/, '').split(/\r?\n/)) {
     const line = rawLine.trim()
@@ -62,6 +74,10 @@ export function parseSkinIni(text: string): SkinConfig {
           color: toHex(channels[0]!, channels[1]!, channels[2]!),
         })
       }
+      const sliderBorderMatch = /^SliderBorder\s*:\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(line)
+      if (sliderBorderMatch !== null) sliderBorderColor = colorFromMatch(sliderBorderMatch)
+      const sliderTrackMatch = /^SliderTrackOverride\s*:\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(line)
+      if (sliderTrackMatch !== null) sliderTrackOverride = colorFromMatch(sliderTrackMatch)
     }
   }
 
@@ -69,6 +85,8 @@ export function parseSkinIni(text: string): SkinConfig {
   return {
     comboColors: comboColors.length > 0 ? comboColors.map(({ color }) => color) : DEFAULT_COMBO_COLORS,
     animationFramerate,
+    sliderBorderColor,
+    sliderTrackOverride,
   }
 }
 
@@ -93,7 +111,11 @@ export async function loadSkin(
     entries.filter((entry) => entry.kind === 'file').map((entry) => [entry.name.toLowerCase(), entry.name]),
   )
   const objectUrls: string[] = []
-  let config: SkinConfig = { comboColors: DEFAULT_COMBO_COLORS, animationFramerate: 0 }
+  let config: SkinConfig = {
+    comboColors: DEFAULT_COMBO_COLORS,
+    animationFramerate: 0,
+    sliderBorderColor: '#ffffff',
+  }
   const iniName = files.get('skin.ini')
   if (iniName !== undefined) {
     try {
@@ -104,11 +126,33 @@ export async function loadSkin(
   }
 
   const loadImage = (baseName: string) => loadSkinImage(fileSystem, folder, files, baseName, objectUrls)
-  const [hitcircle, hitcircleoverlay, approachcircle, cursor, ...numbers] = await Promise.all([
+  const [
+    hitcircle,
+    hitcircleoverlay,
+    approachcircle,
+    cursor,
+    sliderStartCircle,
+    sliderStartCircleOverlay,
+    sliderEndCircle,
+    sliderEndCircleOverlay,
+    reverseArrow,
+    sliderBall,
+    sliderFollowCircle,
+    sliderScorePoint,
+    ...numbers
+  ] = await Promise.all([
     loadImage('hitcircle'),
     loadImage('hitcircleoverlay'),
     loadImage('approachcircle'),
     loadImage('cursor'),
+    loadImage('sliderstartcircle'),
+    loadImage('sliderstartcircleoverlay'),
+    loadImage('sliderendcircle'),
+    loadImage('sliderendcircleoverlay'),
+    loadImage('reversearrow'),
+    loadImage('sliderb'),
+    loadImage('sliderfollowcircle'),
+    loadImage('sliderscorepoint'),
     ...Array.from({ length: 10 }, (_, digit) => loadImage(`default-${digit}`)),
   ])
 
@@ -119,6 +163,14 @@ export async function loadSkin(
     hitcircleoverlay,
     approachcircle,
     cursor,
+    sliderStartCircle,
+    sliderStartCircleOverlay,
+    sliderEndCircle,
+    sliderEndCircleOverlay,
+    reverseArrow,
+    sliderBall,
+    sliderFollowCircle,
+    sliderScorePoint,
     numbers,
     frame(image, timeMS) {
       if (image === undefined || image.frames.length === 0) return undefined
@@ -199,4 +251,12 @@ function clampByte(value: number): number {
 
 function toHex(red: number, green: number, blue: number): string {
   return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`
+}
+
+function colorFromMatch(match: RegExpExecArray): string {
+  return toHex(
+    clampByte(Number(match[1])),
+    clampByte(Number(match[2])),
+    clampByte(Number(match[3])),
+  )
 }

@@ -29,10 +29,11 @@ export class PlayfieldView {
         </div>
       </header>
       <div class="playfield-letterbox">
-        <canvas aria-label="Passive osu! playfield"></canvas>
+        <canvas class="slider-body-layer" aria-hidden="true"></canvas>
+        <canvas class="playfield-sprite-layer" aria-label="Passive osu! playfield"></canvas>
       </div>
     `
-    this.#canvas = required<HTMLCanvasElement>(this.#root, 'canvas')
+    this.#canvas = required<HTMLCanvasElement>(this.#root, '.playfield-sprite-layer')
     this.#position = required<HTMLOutputElement>(this.#root, '#watch-position')
     required<HTMLButtonElement>(this.#root, '#watch-close').addEventListener('click', () => this.close())
     for (const button of this.#root.querySelectorAll<HTMLButtonElement>('[data-watch-speed]')) {
@@ -55,7 +56,8 @@ export class PlayfieldView {
     this.close()
     required<HTMLHeadingElement>(this.#root, '#watch-title').textContent = title
     this.#root.hidden = false
-    this.#renderer = new CanvasPlayfield(this.#canvas, beatmap, skin)
+    const sliderCanvas = required<HTMLCanvasElement>(this.#root, '.slider-body-layer')
+    this.#renderer = new CanvasPlayfield(this.#canvas, sliderCanvas, beatmap, skin)
   }
 
   render(positionMS: number): void {

@@ -11,9 +11,13 @@ AnimationFramerate: 24
 Combo3 : 18, 124, 255
 Combo1: 255, 192, 0
 Combo2 : 0, 202, 0
+SliderBorder: 245,245,245
+SliderTrackOverride: 12,34,56
 `)
   assert.equal(config.animationFramerate, 24)
   assert.deepEqual(config.comboColors, ['#ffc000', '#00ca00', '#127cff'])
+  assert.equal(config.sliderBorderColor, '#f5f5f5')
+  assert.equal(config.sliderTrackOverride, '#0c2238')
 })
 
 test('falls back to McOsu combo colors and clamps invalid framerate', () => {

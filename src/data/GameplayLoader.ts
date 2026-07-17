@@ -2,6 +2,8 @@ import { HitType, type PathType } from 'osu-classes'
 import { BeatmapDecoder, SlidableObject, SpinnableObject } from 'osu-parsers'
 import type { BeatmapEntry } from './OsuDatabase.ts'
 import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import { relativeControlPointsToAbsolute } from '../core/SliderCurves.ts'
+import { generateSliderTickPercentages } from '../core/SliderTicks.ts'
 
 export interface GameplayPoint {
   readonly x: number
@@ -40,6 +42,10 @@ export interface GameplaySlider extends GameplayObjectBase {
   readonly curveType: PathType
   /** osu-parsers exposes SliderPath control points relative to the slider head. */
   readonly controlPoints: readonly GameplaySliderControlPoint[]
+  /** Absolute, truncated points expected by McOsu's curve constructors. */
+  readonly absoluteControlPoints: readonly GameplayPoint[]
+  readonly spanDuration: number
+  readonly tickPercentages: readonly number[]
 }
 
 export interface GameplaySpinner extends GameplayObjectBase {
@@ -50,10 +56,13 @@ export interface GameplaySpinner extends GameplayObjectBase {
 export type GameplayObject = GameplayCircle | GameplaySlider | GameplaySpinner
 
 export interface GameplayBeatmap {
+  readonly fileVersion: number
   readonly approachRate: number
   readonly circleSize: number
   readonly overallDifficulty: number
   readonly drainRate: number
+  readonly sliderMultiplier: number
+  readonly sliderTickRate: number
   readonly circles: readonly GameplayCircle[]
   readonly sliders: readonly GameplaySlider[]
   readonly spinners: readonly GameplaySpinner[]
@@ -113,6 +122,14 @@ export function parseGameplayBeatmap(text: string): GameplayBeatmap {
 
     if (object instanceof SlidableObject || (object.hitType & HitType.Slider) !== 0) {
       const slider = object as SlidableObject
+      const controlPoints = slider.path.controlPoints.map((point) => ({
+        x: point.position.x,
+        y: point.position.y,
+        type: point.type,
+      }))
+      const absoluteControlPoints = relativeControlPointsToAbsolute(base.position, controlPoints)
+      const timingPoint = decoded.controlPoints.timingPointAt(slider.startTime)
+      const difficultyPoint = decoded.controlPoints.difficultyPointAt(slider.startTime)
       const gameplayObject: GameplaySlider = {
         ...base,
         kind: 'slider',
@@ -121,11 +138,18 @@ export function parseGameplayBeatmap(text: string): GameplayBeatmap {
         spans: slider.spans,
         pixelLength: slider.path.expectedDistance,
         curveType: slider.path.curveType,
-        controlPoints: slider.path.controlPoints.map((point) => ({
-          x: point.position.x,
-          y: point.position.y,
-          type: point.type,
-        })),
+        controlPoints,
+        absoluteControlPoints,
+        spanDuration: slider.spanDuration,
+        tickPercentages: generateSliderTickPercentages({
+          beatmapVersion: decoded.fileFormat,
+          pixelLength: slider.path.expectedDistance,
+          sliderMultiplier: decoded.difficulty.sliderMultiplier,
+          sliderTickRate: decoded.difficulty.sliderTickRate,
+          velocity: slider.velocity,
+          baseBeatLength: timingPoint.beatLengthUnlimited,
+          generateTicks: difficultyPoint.generateTicks,
+        }),
       }
       sliders.push(gameplayObject)
       objects.push(gameplayObject)
@@ -147,10 +171,13 @@ export function parseGameplayBeatmap(text: string): GameplayBeatmap {
   }
 
   return {
+    fileVersion: decoded.fileFormat,
     approachRate: decoded.difficulty.approachRate,
     circleSize: decoded.difficulty.circleSize,
     overallDifficulty: decoded.difficulty.overallDifficulty,
     drainRate: decoded.difficulty.drainRate,
+    sliderMultiplier: decoded.difficulty.sliderMultiplier,
+    sliderTickRate: decoded.difficulty.sliderTickRate,
     circles,
     sliders,
     spinners,

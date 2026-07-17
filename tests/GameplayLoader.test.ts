@@ -67,5 +67,12 @@ test('decodes hit objects into a parser-independent gameplay boundary', () => {
     { x: 44, y: 8, type: null },
     { x: 94, y: -42, type: null },
   ])
+  assert.deepEqual(slider.absoluteControlPoints, [
+    { x: 256, y: 192 },
+    { x: 300, y: 200 },
+    { x: 350, y: 150 },
+  ])
+  assert.ok(Math.abs(slider.spanDuration - (500 * 200) / (1.4 * 100)) < 1e-9)
+  assert.deepEqual(slider.tickPercentages, [0.7])
   assert.equal(beatmap.spinners[0]?.endTime, 4_000)
 })
