@@ -8,6 +8,8 @@ const integer = (name: string, defaultValue: number, description = '') =>
   convars.register({ name, kind: 'int', defaultValue, description })
 const float = (name: string, defaultValue: number, description = '') =>
   convars.register({ name, kind: 'float', defaultValue, description })
+const string = (name: string, defaultValue: string, description = '') =>
+  convars.register({ name, kind: 'string', defaultValue, description })
 
 // Exact McOsu names/defaults from OsuBeatmap.cpp, OsuSlider.cpp,
 // OsuBeatmapStandard.cpp, OsuGameRules.cpp, and OsuHitObject.cpp.
@@ -28,6 +30,13 @@ export const osuModHdCircleFadeInEndPercent = float('osu_mod_hd_circle_fadein_en
 export const osuModHdCircleFadeOutStartPercent = float('osu_mod_hd_circle_fadeout_start_percent', 0.6, 'HD fade-out starts this many approach times before the object.')
 export const osuModHdCircleFadeOutEndPercent = float('osu_mod_hd_circle_fadeout_end_percent', 0.3, 'HD fade-out ends this many approach times before the object.')
 export const osuShowApproachCircleOnFirstHiddenObject = bool('osu_show_approach_circle_on_first_hidden_object', true, 'Force the first HD object approach circle.')
+
+// OsuBeatmap.cpp:72-78, Osu.cpp:85, and OsuSkin.cpp:33.
+export const osuBackgroundDim = float('osu_background_dim', 0.9, 'Background dim while playing.')
+export const osuBackgroundFadeInDuration = float('osu_background_fade_in_duration', 0.85, 'Background fade-in duration in seconds.')
+export const osuBackgroundFadeOutDuration = float('osu_background_fade_out_duration', 0.25, 'Background fade-out duration in seconds.')
+export const osuSkin = string('osu_skin', '', 'Current local skin folder; empty uses procedural fallback.')
+export const osuVolumeEffects = float('osu_volume_effects', 1, 'Hitsound and effect volume.')
 
 export const osuApproachTimeMin = integer('osu_approachtime_min', 1800)
 export const osuApproachTimeMid = integer('osu_approachtime_mid', 1200)

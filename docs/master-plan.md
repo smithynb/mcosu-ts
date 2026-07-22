@@ -12,7 +12,7 @@
 
 ## PROGRESS (updated 2026-07-21)
 
-Repo: `/home/code/mcosu-ts` (git, `main`, 11 commits including this phase, 83 Node tests passing, `npm run build` clean). Implementation by Codex CLI; Claude verifies each increment against the C++ and dispatches the next.
+Repo: `/home/code/mcosu-ts` (git, `main`, 13 commits including this increment, 88 Node tests passing, `npm run build` clean). Implementation by Codex CLI; Claude verifies each increment against the C++ and dispatches the next.
 
 Done (commit — content):
 - `c296fb3` — phase 1 spike: Vite+TS scaffold, File System Access adapter (IndexedDB-persisted handle), OsuFile binary reader port, osu!.db parser, DOM song list + search.
@@ -24,7 +24,9 @@ Done (commit — content):
 - `4715b08` — ConVar registry + backtick console (localStorage persist, McOsu names/defaults), stacking port (modern+legacy branches), mods EZ/HR/HD/NF/DT/NC/HT/Auto with exact factors, universal/local offsets (signs match `OsuBeatmap.cpp:581`).
 - `d587247` — phase 4b: lazy/cached no-mod stars and live/final pp via `osu-standard-stable`, exact McOsu grades, read-only osu!stable + McOsu custom `scores.db` parsing, selected-map top local scores.
 - `25403c2` — phase 5a: stable HP drain calibration/gains, NF/Auto fail suppression, HP HUD, 2.25s browser fail slowdown, pause/retry/quit flow, full ranking statistics, and browser-local completed scores.
-- phase 5b (this commit) — `.osr` import/watch through ScoreV1 judgments, osu-compatible browser replay recording and local persistence, stable/custom collection parsing and filtering, replay actions, and local-best grade badges.
+- `76e4bf3` — phase 5b: `.osr` import/watch through ScoreV1 judgments, osu-compatible browser replay recording and local persistence, stable/custom collection parsing and filtering, replay actions, and local-best grade badges.
+- `40b2d72` — phase 5b corrections: collapse stable M/K duplicate replay bits into two logical input sides and skip malformed collection hashes like McOsu.
+- options increment (this commit) — McOsu-structured DOM options overlay backed directly by persisted ConVars for gameplay, skin/effects volume, input reference, and general runtime behavior.
 
 **Next up (phase 6)**: Tauri filesystem adapter and release wrapper, plus real-folder/replay parity testing on the native path.
 

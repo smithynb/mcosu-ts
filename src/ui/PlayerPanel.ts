@@ -21,6 +21,7 @@ import { createStandardPerformance } from '../core/StandardPerformance.ts'
 import { LocalPlayStore } from '../data/LocalPlayStore.ts'
 import type { RankingResult } from './PlayfieldView.ts'
 import { parseReplay, type ImportedReplay } from '../core/Replay.ts'
+import { osuSkin } from '../core/ConVars.ts'
 
 interface JitterSample {
   readonly at: number
@@ -71,6 +72,7 @@ export class PlayerPanel {
   readonly #localPlayStore = new LocalPlayStore()
   #baseScores: readonly LocalScore[] = []
   #playId = ''
+  #availableSkinNames: readonly string[] = []
   readonly #onScoresChanged: (index: ReadonlyMap<string, readonly LocalScore[]>) => void
 
   constructor(root: HTMLElement, onScoresChanged: (index: ReadonlyMap<string, readonly LocalScore[]>) => void = () => {}) {
@@ -199,6 +201,10 @@ export class PlayerPanel {
     this.#pitchToggle.addEventListener('change', () => {
       this.#player?.setPitchPreserved(this.#pitchToggle.checked)
     })
+    this.#skinSelect.addEventListener('change', () => osuSkin.setValue(this.#skinSelect.value))
+    osuSkin.onChange((value) => {
+      if ([...this.#skinSelect.options].some((item) => item.value === value)) this.#skinSelect.value = value
+    })
     for (const button of this.#speedButtons) {
       button.addEventListener('click', () => this.#setSpeed(Number(button.dataset.speed)))
     }
@@ -222,6 +228,10 @@ export class PlayerPanel {
       void this.#importReplay(file)
     })
   }
+
+  get isGameplayOpen(): boolean { return this.#playfieldView.isOpen }
+
+  skinNames(): readonly string[] { return [...this.#availableSkinNames] }
 
   async open(beatmap: BeatmapEntry, fileSystem: OsuFileSystem): Promise<void> {
     const generation = ++this.#loadGeneration
@@ -276,8 +286,10 @@ export class PlayerPanel {
   async #loadSkinChoices(fileSystem: OsuFileSystem, generation: number): Promise<void> {
     const names = await listSkinNames(fileSystem)
     if (generation !== this.#loadGeneration) return
+    this.#availableSkinNames = names
     this.#skinSelect.replaceChildren(option('', 'Procedural fallback'))
     for (const name of names) this.#skinSelect.append(option(name, name))
+    this.#skinSelect.value = names.includes(osuSkin.getString()) ? osuSkin.getString() : ''
   }
 
   async #openGameplay(mode: 'watch' | 'play' | 'replay', replay?: Pick<ImportedReplay, 'modsLegacy' | 'frames'>): Promise<void> {
@@ -632,6 +644,7 @@ export class PlayerPanel {
     this.#beatmap = null
     this.#fileSystem = null
     this.#skinSelect.replaceChildren(option('', 'Procedural fallback'))
+    this.#availableSkinNames = []
     this.#playButton.textContent = 'Play'
     this.#seek.value = '0'
     this.#rawReadout.value = '0.000'

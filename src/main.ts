@@ -14,6 +14,7 @@ import {
 } from './fs/osuFileSystem'
 import { PlayerPanel } from './ui/PlayerPanel'
 import { ConsoleOverlay } from './ui/ConsoleOverlay'
+import { OptionsOverlay } from './ui/OptionsOverlay'
 import { convars } from './core/ConVars'
 import { NO_MODS } from './core/Mods'
 import { calculateStarRating } from './core/StandardPerformance'
@@ -36,7 +37,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="pulse" aria-hidden="true"></span>
         <span>mcosu</span><span class="wordmark-suffix">.ts</span>
       </div>
-      <p class="phase">replays & collections / phase 05b</p>
+      <div class="masthead-actions"><p class="phase">options parity / phase 05b+</p><button id="options-button" type="button">Options <kbd>O</kbd></button></div>
     </header>
 
     <section class="intro" aria-labelledby="page-title">
@@ -87,6 +88,8 @@ const playerPanel = new PlayerPanel(requireElement<HTMLElement>('player-panel'),
   renderLibrary()
 })
 new ConsoleOverlay(convars)
+const optionsOverlay = new OptionsOverlay(convars, () => playerPanel.skinNames())
+const optionsButton = requireElement<HTMLButtonElement>('options-button')
 
 let beatmaps: BeatmapEntry[] | null = null
 let activeFileSystem: OsuFileSystem | null = null
@@ -97,6 +100,13 @@ let collectionIndex: ReadonlyMap<string, ReadonlySet<string>> = new Map()
 selectButton.addEventListener('click', () => void chooseFolder())
 searchInput.addEventListener('input', renderLibrary)
 collectionSelect.addEventListener('change', renderLibrary)
+optionsButton.addEventListener('click', () => { if (!playerPanel.isGameplayOpen) optionsOverlay.toggle() })
+document.addEventListener('keydown', (event) => {
+  if (event.code !== 'KeyO' || event.repeat || event.ctrlKey || event.metaKey || event.altKey || playerPanel.isGameplayOpen) return
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || (event.target instanceof HTMLElement && event.target.isContentEditable)) return
+  event.preventDefault()
+  optionsOverlay.toggle()
+})
 
 void reconnectOnLoad()
 

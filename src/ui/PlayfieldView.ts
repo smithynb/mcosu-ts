@@ -114,6 +114,8 @@ export class PlayfieldView {
     document.body.append(this.#root)
   }
 
+  get isOpen(): boolean { return !this.#root.hidden }
+
   open(
     beatmap: GameplayBeatmap,
     skin: LoadedSkin | null,

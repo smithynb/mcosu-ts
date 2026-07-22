@@ -1,6 +1,7 @@
 import type { GameplayBeatmap, GameplaySample } from '../data/GameplayLoader.ts'
 import type { BeatmapEntry } from '../data/OsuDatabase.ts'
 import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import { osuVolumeEffects } from '../core/ConVars.ts'
 
 interface LoadedSample {
   readonly buffer: AudioBuffer
@@ -61,7 +62,11 @@ export class HitSoundPlayer {
       source.buffer = loaded.buffer
       // OsuSkin.cpp:844-865 applies 0.8 to hitnormal, 0.85 to
       // whistle/clap, and 1.0 to finish before the timing-point volume.
-      gain.gain.value = clamp((loaded.volume / 100) * sampleVolumeMultiplier(sample.hitSound), 0, 1)
+      gain.gain.value = clamp(
+        (loaded.volume / 100) * sampleVolumeMultiplier(sample.hitSound) * osuVolumeEffects.getFloat(),
+        0,
+        1,
+      )
       // OsuGameRules.h:24-27: positional pan covers the center 80% of stereo.
       panner.pan.value = clamp((x / 512 - 0.5) * 0.8, -1, 1)
       source.connect(gain).connect(panner).connect(this.#context.destination)

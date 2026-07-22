@@ -136,10 +136,6 @@ export class ReplayRecorder {
   }
 }
 
-function keyInputs(): readonly (readonly [number, string])[] {
-  return [[KEY_M1, 'MouseLeft'], [KEY_M2, 'MouseRight'], [KEY_K1, 'KeyZ'], [KEY_K2, 'KeyX']]
-}
-
 function logicalSides(): readonly {
   readonly mask: number
   readonly input: (keys: number) => string

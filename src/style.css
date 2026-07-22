@@ -120,6 +120,119 @@ select:focus-visible {
   border-bottom: 1px solid var(--rule);
 }
 
+.masthead-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.masthead-actions button {
+  padding: 7px 10px;
+  border: 1px solid #3a3d4d;
+  border-radius: 3px;
+  color: var(--ink);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+kbd {
+  color: var(--beat-soft);
+  font: .72em "SFMono-Regular", Consolas, monospace;
+}
+
+.options-overlay {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(4 5 9 / .78);
+}
+
+.options-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1040px, 100%);
+  height: min(760px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid #484b5c;
+  background: #0d0f16;
+  box-shadow: 0 36px 120px rgb(0 0 0 / .72);
+}
+
+.options-header {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 24px;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.options-header h2 { margin: 3px 0 0; font-size: 1.8rem; letter-spacing: -.04em; }
+.options-header > p { margin: 0; color: var(--muted); font-size: .78rem; }
+.options-header button { padding: 8px 11px; border: 1px solid #3b3e4d; color: var(--ink); background: var(--surface); cursor: pointer; }
+
+.options-layout {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.options-layout nav {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  padding: 22px 14px;
+  border-right: 1px solid var(--rule);
+  background: #0a0c12;
+}
+
+.options-layout nav a {
+  padding: 10px 12px;
+  color: var(--muted);
+  font: .72rem "SFMono-Regular", Consolas, monospace;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.options-layout nav a:hover,
+.options-layout nav a:focus-visible { color: var(--ink); background: rgb(233 103 161 / .1); }
+
+.options-content { overflow: auto; scroll-behavior: smooth; }
+.options-section { padding: 28px clamp(20px, 5vw, 48px) 34px; scroll-margin-top: 12px; }
+.options-section + .options-section { border-top: 1px solid var(--rule); }
+.options-section-heading { display: flex; gap: 14px; align-items: baseline; margin-bottom: 20px; }
+.options-section-heading > span { color: var(--beat); font: .68rem "SFMono-Regular", Consolas, monospace; }
+.options-section-heading h3 { margin: 0; font-size: 1.35rem; }
+.options-section-heading p { margin: 4px 0 0; color: var(--muted); font-size: .78rem; }
+
+.option-row,
+.binding-reference {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1.25fr) 82px auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 62px;
+  padding: 10px 0;
+  border-top: 1px solid rgb(255 255 255 / .055);
+}
+.option-row > div { display: grid; gap: 4px; }
+.option-row label { color: #e3e0e9; font-size: .85rem; }
+.option-row small { color: var(--quiet); font: .64rem "SFMono-Regular", Consolas, monospace; }
+.option-row input[type="range"] { width: 100%; accent-color: var(--beat); }
+.option-row input[type="checkbox"] { justify-self: start; width: 18px; height: 18px; accent-color: var(--beat); }
+.option-row select { min-width: 0; padding: 8px; border: 1px solid #393c4b; color: var(--ink); background: var(--surface); }
+.option-row output { color: var(--beat-soft); font: .72rem "SFMono-Regular", Consolas, monospace; text-align: right; }
+.option-row button { padding: 6px 8px; border: 1px solid #343746; color: var(--muted); background: transparent; cursor: pointer; }
+.option-row-check { grid-template-columns: minmax(180px, 1fr) minmax(180px, 1.25fr) auto; }
+
+.binding-reference { grid-template-columns: minmax(180px, 1fr) 100px 1fr; }
+.binding-reference > span { color: #e3e0e9; font-size: .85rem; }
+.binding-reference kbd { justify-self: start; padding: 5px 8px; border: 1px solid #444758; background: var(--surface); }
+.binding-reference small { color: var(--quiet); }
+
 .wordmark {
   display: flex;
   align-items: center;
@@ -907,6 +1020,23 @@ code {
   .phase {
     display: none;
   }
+
+  .options-overlay { padding: 0; }
+  .options-window { width: 100%; height: 100%; border: 0; }
+  .options-header { grid-template-columns: 1fr auto; padding: 16px; }
+  .options-header > p { display: none; }
+  .options-layout { grid-template-columns: 1fr; }
+  .options-layout nav { display: flex; overflow-x: auto; padding: 8px; border-right: 0; border-bottom: 1px solid var(--rule); }
+  .options-section { padding: 24px 16px 30px; }
+  .option-row,
+  .option-row-check,
+  .binding-reference { grid-template-columns: 1fr auto; gap: 8px 12px; }
+  .option-row > input[type="range"],
+  .option-row > select { grid-column: 1 / -1; grid-row: 2; }
+  .option-row output { grid-column: 1; grid-row: 3; justify-self: start; }
+  .option-row button { grid-column: 2; grid-row: 3; }
+  .option-row-check input { grid-column: 2; grid-row: 1; }
+  .binding-reference small { grid-column: 1 / -1; }
 
   .intro h1 {
     letter-spacing: -0.065em;
