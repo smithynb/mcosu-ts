@@ -69,6 +69,13 @@ export class OsuFile {
     return value
   }
 
+  readUnsignedLongLong(): bigint {
+    this.#require(8)
+    const value = this.#view.getBigUint64(this.#offset, LITTLE_ENDIAN)
+    this.#offset += 8
+    return value
+  }
+
   readULEB128(): bigint {
     const start = this.#offset
     let value = 0n
@@ -177,6 +184,15 @@ export class OsuFile {
 
   skipTimingPoint(): void {
     this.skip(17)
+  }
+
+  skipByteArray(maximumLength = 256 * 1024 * 1024): void {
+    const lengthOffset = this.#offset
+    const length = this.readInt()
+    if (length < 0 || length > maximumLength) {
+      throw new OsuFileFormatError(`Invalid byte-array length: ${length}`, lengthOffset)
+    }
+    this.skip(length)
   }
 
   #require(byteCount: number): void {

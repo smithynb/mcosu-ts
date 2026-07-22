@@ -15,6 +15,11 @@ import {
 import { PlayerPanel } from './ui/PlayerPanel'
 import { ConsoleOverlay } from './ui/ConsoleOverlay'
 import { convars } from './core/ConVars'
+import { NO_MODS } from './core/Mods'
+import { calculateStarRating } from './core/StandardPerformance'
+import { StarRatingCache } from './core/StarRatingCache'
+import { indexScoresByMd5, parseScoresDatabase } from './data/ScoresDatabase'
+import { readGameplayBeatmapText } from './data/GameplayLoader'
 
 const MAX_RENDERED_ROWS = 400
 
@@ -25,7 +30,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="pulse" aria-hidden="true"></span>
         <span>mcosu</span><span class="wordmark-suffix">.ts</span>
       </div>
-      <p class="phase">gameplay configuration / phase 04a</p>
+      <p class="phase">stars, pp & local scores / phase 04b</p>
     </header>
 
     <section class="intro" aria-labelledby="page-title">
@@ -70,6 +75,8 @@ new ConsoleOverlay(convars)
 
 let beatmaps: BeatmapEntry[] | null = null
 let activeFileSystem: OsuFileSystem | null = null
+let starRatingCache: StarRatingCache | null = null
+let libraryGeneration = 0
 
 selectButton.addEventListener('click', () => void chooseFolder())
 searchInput.addEventListener('input', renderLibrary)
@@ -124,7 +131,13 @@ async function chooseFolder(): Promise<void> {
 }
 
 async function loadLibrary(fileSystem: OsuFileSystem): Promise<void> {
+  const generation = ++libraryGeneration
   activeFileSystem = fileSystem
+  starRatingCache = new StarRatingCache(async (entry) =>
+    calculateStarRating(await readGameplayBeatmapText(fileSystem, entry), NO_MODS),
+  )
+  playerPanel.setLocalScores(null)
+  void loadLocalScores(fileSystem, generation)
   let databaseFailure: string | null = null
   if (await fileSystem.exists('osu!.db')) {
     try {
@@ -159,6 +172,26 @@ async function loadLibrary(fileSystem: OsuFileSystem): Promise<void> {
     beatmaps = null
     library.hidden = true
     throw new Error(`${databaseFailure}. Raw Songs scan also failed: ${messageForError(error)}`)
+  }
+}
+
+async function loadLocalScores(fileSystem: OsuFileSystem, generation: number): Promise<void> {
+  try {
+    if (!(await fileSystem.exists('scores.db'))) {
+      if (generation === libraryGeneration) playerPanel.setLocalScores(new Map(), 'scores.db is missing from the selected folder.')
+      return
+    }
+    const file = await fileSystem.getFile('scores.db')
+    const database = parseScoresDatabase(await file.arrayBuffer())
+    if (generation !== libraryGeneration) return
+    playerPanel.setLocalScores(
+      indexScoresByMd5(database.scores),
+      `No ${database.format === 'stable' ? 'osu!stable' : 'McOsu'} local scores for this beatmap.`,
+    )
+  } catch (error) {
+    if (generation !== libraryGeneration) return
+    const reason = error instanceof Error ? error.message : String(error)
+    playerPanel.setLocalScores(new Map(), `Local scores unavailable: ${reason}`)
   }
 }
 
@@ -219,13 +252,27 @@ function createSongRow(entry: BeatmapEntry): HTMLElement {
   const stars = document.createElement('span')
   stars.className = 'stars'
   stars.textContent = entry.starRating === undefined ? '— ★' : `${entry.starRating.toFixed(2)} ★`
-  stars.title = entry.starRating === undefined ? 'No no-mod star rating in osu!.db' : 'No-mod star rating'
+  stars.title = entry.starRating === undefined ? 'Calculating no-mod star rating…' : 'osu!.db no-mod rating; recalculating lazily…'
 
   const copy = document.createElement('span')
   copy.className = 'song-copy'
   copy.append(title, creator)
   row.append(copy, stars)
   item.append(row)
+  const cache = starRatingCache
+  if (cache !== null) {
+    queueMicrotask(() => {
+      if (!item.isConnected || cache !== starRatingCache) return
+      void cache.get(entry).then((rating) => {
+        if (!item.isConnected || cache !== starRatingCache) return
+        stars.textContent = `${rating.toFixed(2)} ★`
+        stars.title = 'Calculated lazily with osu-standard-stable (no mods)'
+      }).catch((error) => {
+        if (!item.isConnected || cache !== starRatingCache) return
+        stars.title = `Star calculation failed: ${messageForError(error)}`
+      })
+    })
+  }
   return item
 }
 

@@ -329,6 +329,37 @@ code {
 .mod-select > div { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .45rem; }
 .mod-select button[aria-pressed="true"] { color: var(--ink); border-color: var(--beat); background: color-mix(in srgb, var(--beat) 22%, transparent); }
 
+.local-scores {
+  display: grid;
+  grid-template-columns: minmax(12rem, .7fr) minmax(18rem, 1.3fr);
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: rgb(255 255 255 / .018);
+}
+
+.local-scores h3,
+.local-scores p { margin: 0; }
+.local-scores p { margin-top: .35rem; color: var(--muted); font-size: .78rem; }
+.local-scores ol { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.local-scores li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: .7rem;
+  padding: .55rem .7rem;
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+.local-scores li span { color: var(--muted); font-size: .78rem; }
+.local-scores time { color: var(--quiet); font-size: .72rem; }
+
+@media (max-width: 720px) {
+  .local-scores { grid-template-columns: 1fr; }
+  .local-scores li { grid-template-columns: 1fr; gap: .2rem; }
+}
+
 .speed-keys {
   display: flex;
   gap: 7px;

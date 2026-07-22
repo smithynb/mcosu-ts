@@ -4,6 +4,9 @@ import type { GameplayBeatmap } from '../data/GameplayLoader.ts'
 import { GameplayInput } from '../input/GameplayInput.ts'
 import { CanvasPlayfield, type PlayfieldRenderer } from '../render/Playfield.ts'
 import type { LoadedSkin } from '../skin/Skin.ts'
+import { calculateGrade } from '../core/Grade.ts'
+import type { ModdedGameplayBeatmap } from '../core/Mods.ts'
+import type { StandardPerformanceContext } from '../core/StandardPerformance.ts'
 
 export class PlayfieldView {
   readonly #root: HTMLDivElement
@@ -16,6 +19,9 @@ export class PlayfieldView {
   #lastCursor = { x: 256, y: 192 }
   #mode: 'watch' | 'play' = 'watch'
   #beatmap: GameplayBeatmap | null = null
+  #performance: StandardPerformanceContext | null = null
+  #livePp = 0
+  #lastPpKey = ''
   #lastPositionMS = Number.NEGATIVE_INFINITY
 
   constructor(onSpeedChange: (speed: number) => void) {
@@ -68,7 +74,11 @@ export class PlayfieldView {
     beatmap: GameplayBeatmap,
     skin: LoadedSkin | null,
     title: string,
-    options: { mode?: 'watch' | 'play'; hitSounds?: HitSoundPlayer | null } = {},
+    options: {
+      mode?: 'watch' | 'play'
+      hitSounds?: HitSoundPlayer | null
+      performance?: StandardPerformanceContext | null
+    } = {},
   ): void {
     this.close()
     this.#mode = options.mode ?? 'watch'
@@ -79,6 +89,7 @@ export class PlayfieldView {
     const sliderCanvas = required<HTMLCanvasElement>(this.#root, '.slider-body-layer')
     this.#renderer = new CanvasPlayfield(this.#canvas, sliderCanvas, beatmap, skin)
     this.#beatmap = beatmap
+    this.#performance = options.performance ?? null
     this.#session = new GameplaySession(beatmap, { autoplay: this.#mode === 'watch' })
     this.#lastPositionMS = Number.NEGATIVE_INFINITY
     this.#hitSounds = options.hitSounds ?? null
@@ -98,6 +109,8 @@ export class PlayfieldView {
     if (this.#root.hidden || this.#renderer === null || this.#session === null) return
     if (positionMS + 5 < this.#lastPositionMS && this.#beatmap !== null) {
       this.#session = new GameplaySession(this.#beatmap, { autoplay: this.#mode === 'watch', speedMultiplier })
+      this.#lastPpKey = ''
+      this.#livePp = 0
       required<HTMLElement>(this.#root, '#play-results').hidden = true
     }
     this.#session.setSpeedMultiplier(speedMultiplier)
@@ -106,13 +119,26 @@ export class PlayfieldView {
     const input = this.#input?.consume(positionMS, frameTimeStamp, speedMultiplier) ?? emptyInput(this.#lastCursor)
     this.#lastCursor = input.position
     const snapshot = this.#session.update(positionMS, input)
+    const ppKey = scoreKey(snapshot.score)
+    if (ppKey !== this.#lastPpKey) {
+      this.#lastPpKey = ppKey
+      this.#livePp = this.#performance?.calculate(snapshot.score).pp ?? 0
+    }
+    const mods = (this.#beatmap as Partial<ModdedGameplayBeatmap> | null)?.mods
     this.#playHitSounds(snapshot.events)
-    this.#renderer.render(positionMS, { snapshot, cursor: this.#lastCursor })
+    this.#renderer.render(positionMS, {
+      snapshot,
+      cursor: this.#lastCursor,
+      pp: this.#performance === null ? undefined : this.#livePp,
+      ppUnranked: mods?.Auto === true,
+    })
     const results = required<HTMLElement>(this.#root, '#play-results')
     if (snapshot.finished) {
       const score = snapshot.score
+      const grade = calculateGrade(score, { hidden: mods?.HD === true })
+      const pp = mods?.Auto === true ? 'unranked' : `${this.#livePp.toFixed(2)} pp`
       results.hidden = false
-      results.innerHTML = `<p class="eyebrow">results</p><h3>${String(score.score).padStart(8, '0')}</h3><dl><div><dt>300</dt><dd>${score.count300}</dd></div><div><dt>100</dt><dd>${score.count100}</dd></div><div><dt>50</dt><dd>${score.count50}</dd></div><div><dt>miss</dt><dd>${score.countMiss}</dd></div><div><dt>max combo</dt><dd>${score.maxCombo}×</dd></div><div><dt>accuracy</dt><dd>${(score.accuracy * 100).toFixed(2)}%</dd></div></dl>`
+      results.innerHTML = `<p class="eyebrow">results</p><h3>${grade} · ${String(score.score).padStart(8, '0')}</h3><dl><div><dt>300</dt><dd>${score.count300}</dd></div><div><dt>100</dt><dd>${score.count100}</dd></div><div><dt>50</dt><dd>${score.count50}</dd></div><div><dt>miss</dt><dd>${score.countMiss}</dd></div><div><dt>max combo</dt><dd>${score.maxCombo}×</dd></div><div><dt>accuracy</dt><dd>${(score.accuracy * 100).toFixed(2)}%</dd></div><div><dt>performance</dt><dd>${pp}</dd></div></dl>`
     }
   }
 
@@ -130,6 +156,9 @@ export class PlayfieldView {
     this.#session = null
     this.#hitSounds = null
     this.#beatmap = null
+    this.#performance = null
+    this.#lastPpKey = ''
+    this.#livePp = 0
     this.#renderer = null
     this.#lastPositionMS = Number.NEGATIVE_INFINITY
     required<HTMLElement>(this.#root, '#play-results').hidden = true
@@ -157,6 +186,16 @@ export class PlayfieldView {
       if (object.kind !== 'slider') this.#hitSounds.play(object.samples, event.position.x)
     }
   }
+}
+
+function scoreKey(score: {
+  readonly maxCombo: number
+  readonly count300: number
+  readonly count100: number
+  readonly count50: number
+  readonly countMiss: number
+}): string {
+  return `${score.maxCombo}:${score.count300}:${score.count100}:${score.count50}:${score.countMiss}`
 }
 
 function emptyInput(position: { readonly x: number; readonly y: number }): GameplayFrameInput {

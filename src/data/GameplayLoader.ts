@@ -87,8 +87,15 @@ export async function loadGameplayBeatmap(
   fileSystem: Pick<OsuFileSystem, 'getFile'>,
   entry: BeatmapEntry,
 ): Promise<GameplayBeatmap> {
+  return parseGameplayBeatmap(await readGameplayBeatmapText(fileSystem, entry))
+}
+
+export async function readGameplayBeatmapText(
+  fileSystem: Pick<OsuFileSystem, 'getFile'>,
+  entry: BeatmapEntry,
+): Promise<string> {
   const file = await fileSystem.getFile(`Songs/${entry.osuPath}`)
-  return parseGameplayBeatmap(await file.text())
+  return file.text()
 }
 
 export function parseGameplayBeatmap(text: string): GameplayBeatmap {

@@ -1,8 +1,9 @@
 import { BeatmapClock, BeatmapClockState, InterpolatedClock } from '../audio/InterpolatedClock.ts'
 import { MusicPlayer } from '../audio/MusicPlayer.ts'
 import { HitSoundPlayer } from '../audio/HitSoundPlayer.ts'
-import { loadGameplayBeatmap } from '../data/GameplayLoader.ts'
+import { parseGameplayBeatmap, readGameplayBeatmapText } from '../data/GameplayLoader.ts'
 import type { BeatmapEntry } from '../data/OsuDatabase.ts'
+import type { LocalScore } from '../data/ScoresDatabase.ts'
 import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
 import { listSkinNames, loadSkin } from '../skin/Skin.ts'
 import { PlayfieldView } from './PlayfieldView.ts'
@@ -15,6 +16,7 @@ import {
   scoreMultiplier,
   type GameplayMod,
 } from '../core/Mods.ts'
+import { createStandardPerformance } from '../core/StandardPerformance.ts'
 
 interface JitterSample {
   readonly at: number
@@ -39,6 +41,8 @@ export class PlayerPanel {
   readonly #gameplayButton: HTMLButtonElement
   readonly #modButtons: HTMLButtonElement[]
   readonly #modMultiplier: HTMLOutputElement
+  readonly #localScores: HTMLOListElement
+  readonly #localScoresStatus: HTMLParagraphElement
   readonly #rawReadout: HTMLOutputElement
   readonly #interpolatedReadout: HTMLOutputElement
   readonly #stateReadout: HTMLOutputElement
@@ -57,6 +61,8 @@ export class PlayerPanel {
   #fileSystem: OsuFileSystem | null = null
   #speed = 1
   #mods: Record<GameplayMod, boolean> = { ...NO_MODS }
+  #scoreIndex: ReadonlyMap<string, readonly LocalScore[]> | null = null
+  #scoreStatus = 'Local scores are loading…'
 
   constructor(root: HTMLElement) {
     this.#root = root
@@ -115,6 +121,11 @@ export class PlayerPanel {
         <small>score multiplier <output id="mod-multiplier">1.00×</output></small>
       </fieldset>
 
+      <section class="local-scores" aria-labelledby="local-scores-title">
+        <div><h3 id="local-scores-title">Top local scores</h3><p id="local-scores-status">Local scores are loading…</p></div>
+        <ol id="local-scores-list"></ol>
+      </section>
+
       <div class="clock-console" aria-label="Gameplay clock diagnostics">
         <div class="clock-channel clock-channel-raw">
           <span>raw audio</span>
@@ -150,6 +161,8 @@ export class PlayerPanel {
     this.#gameplayButton = element(root, 'play-beatmap')
     this.#modButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-mod]'))
     this.#modMultiplier = element(root, 'mod-multiplier')
+    this.#localScores = element(root, 'local-scores-list')
+    this.#localScoresStatus = element(root, 'local-scores-status')
     this.#rawReadout = element(root, 'raw-position')
     this.#interpolatedReadout = element(root, 'interpolated-position')
     this.#stateReadout = element(root, 'clock-state')
@@ -179,6 +192,7 @@ export class PlayerPanel {
     this.#fileSystem = fileSystem
     this.#root.hidden = false
     this.#title.textContent = `${beatmap.artist} — ${beatmap.title} [${beatmap.difficultyName}]`
+    this.#renderLocalScores()
     this.#setStatus(`Loading ${beatmap.audioFile || 'beatmap audio'}…`)
     this.#setControlsEnabled(false)
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -210,6 +224,15 @@ export class PlayerPanel {
     }
   }
 
+  setLocalScores(
+    index: ReadonlyMap<string, readonly LocalScore[]> | null,
+    status = index === null ? 'Local scores are loading…' : 'No local scores for this beatmap.',
+  ): void {
+    this.#scoreIndex = index
+    this.#scoreStatus = status
+    this.#renderLocalScores()
+  }
+
   async #loadSkinChoices(fileSystem: OsuFileSystem, generation: number): Promise<void> {
     const names = await listSkinNames(fileSystem)
     if (generation !== this.#loadGeneration) return
@@ -226,7 +249,9 @@ export class PlayerPanel {
     this.#gameplayButton.disabled = true
     this.#setStatus('Decoding gameplay objects…')
     try {
-      const gameplay = applyDifficultyMods(await loadGameplayBeatmap(fileSystem, beatmap), this.#mods)
+      const beatmapText = await readGameplayBeatmapText(fileSystem, beatmap)
+      const gameplay = applyDifficultyMods(parseGameplayBeatmap(beatmapText), this.#mods)
+      const performance = createStandardPerformance(beatmapText, this.#mods)
       const speed = modSpeed(this.#mods)
       this.#pitchToggle.checked = modPitchPreserved(this.#mods)
       this.#player?.setPitchPreserved(this.#pitchToggle.checked)
@@ -247,7 +272,7 @@ export class PlayerPanel {
         gameplay,
         skin,
         `${beatmap.artist} — ${beatmap.title} [${beatmap.difficultyName}]`,
-        { mode, hitSounds },
+        { mode, hitSounds, performance },
       )
       if (mode === 'play' && this.#player !== null && this.#beatmapClock !== null) {
         this.#player.setPositionMS(0)
@@ -407,6 +432,42 @@ export class PlayerPanel {
     this.#setSpeed(speed)
   }
 
+  #renderLocalScores(): void {
+    const beatmap = this.#beatmap
+    this.#localScores.replaceChildren()
+    if (beatmap === null) {
+      this.#localScoresStatus.textContent = this.#scoreStatus
+      return
+    }
+    if (beatmap.md5.length === 0) {
+      this.#localScoresStatus.textContent = 'Raw-scanned beatmaps have no MD5 for scores.db lookup.'
+      return
+    }
+    if (this.#scoreIndex === null) {
+      this.#localScoresStatus.textContent = this.#scoreStatus
+      return
+    }
+    const scores = this.#scoreIndex.get(beatmap.md5.toLowerCase()) ?? []
+    if (scores.length === 0) {
+      this.#localScoresStatus.textContent = this.#scoreStatus
+      return
+    }
+    this.#localScoresStatus.textContent = `${scores.length} local score${scores.length === 1 ? '' : 's'} · showing top ${Math.min(5, scores.length)}`
+    for (const score of scores.slice(0, 5)) {
+      const item = document.createElement('li')
+      const heading = document.createElement('strong')
+      heading.textContent = `${score.grade} · ${formatScore(score.score)}`
+      const detail = document.createElement('span')
+      const pp = score.pp !== undefined && score.pp > 0 ? ` · ${score.pp.toFixed(2)} pp` : ''
+      detail.textContent = `${score.playerName || 'Unknown'} · ${score.maxCombo}× · ${(score.accuracy * 100).toFixed(2)}% · ${score.modAcronyms}${pp}`
+      const date = document.createElement('time')
+      date.dateTime = score.playedAt.toISOString()
+      date.textContent = score.playedAt.toLocaleDateString()
+      item.append(heading, detail, date)
+      this.#localScores.append(item)
+    }
+  }
+
   #setStatus(message: string, error = false): void {
     this.#status.textContent = message
     this.#status.dataset.state = error ? 'error' : 'neutral'
@@ -451,4 +512,8 @@ function formatTime(milliseconds: number): string {
   const seconds = Math.floor((safe % 60_000) / 1_000)
   const millis = safe % 1_000
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`
+}
+
+function formatScore(score: bigint): string {
+  return new Intl.NumberFormat().format(score)
 }

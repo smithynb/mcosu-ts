@@ -23,6 +23,8 @@ export interface PlayfieldRenderer {
 export interface GameplayRenderState {
   readonly snapshot: GameplaySnapshot
   readonly cursor: Point
+  readonly pp?: number
+  readonly ppUnranked?: boolean
 }
 
 interface ResultAnimation {
@@ -411,6 +413,13 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     this.#context.fillText(`${(score.accuracy * 100).toFixed(2)}%`, this.#canvas.clientWidth - 24, 42)
     this.#context.font = `650 ${Math.max(12, radius * 0.4)}px Inter, sans-serif`
     this.#context.fillText(String(score.score).padStart(8, '0'), this.#canvas.clientWidth - 24, 66)
+    if (gameplay.pp !== undefined) {
+      this.#context.fillText(
+        gameplay.ppUnranked ? 'pp unranked' : `${gameplay.pp.toFixed(2)} pp`,
+        this.#canvas.clientWidth - 24,
+        88,
+      )
+    }
     this.#context.restore()
 
     const cursor = osuCoords2Pixels(gameplay.cursor, transform)
