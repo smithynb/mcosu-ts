@@ -1,6 +1,6 @@
 # mcosu-ts
 
-> A for-fun slop fork, made mostly for the hell of it. Inspired by Bun rewriting a chunk of itself in Rust — figured, why not port osu! bits to TypeScript. Expect jank. 🎈
+> A pure slop fork of [McOsu](https://github.com/McKay42/McOsu), made for the funny. Inspired by Bun rewrite in Rust. Don't expect too much lol.
 
 `mcosu-ts` is a browser-first TypeScript port for reading and playing an existing osu!stable song library, with an optional Tauri desktop shell. It asks you to select the osu! installation folder, reads `osu!.db` locally, and displays a searchable list of osu!standard beatmaps. If the database is missing or unusable, it automatically scans metadata from `Songs/*/*.osu`. No files are uploaded.
 
@@ -111,3 +111,7 @@ When a beatmap and selected skin provide no usable hitsound, gameplay falls back
 The binary reader and database layout are TypeScript ports derived from [McOsu](https://github.com/McKay42/McOsu), with source regions cited in the implementation. McOsu is licensed under GPL-3.0.
 
 This project is distributed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+
+## How this was built
+
+Fable 5 planned, orchestrated, and reviewed the implementation, which was carried out by GPT-5.6 Sol agents.
