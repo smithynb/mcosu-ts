@@ -19,6 +19,9 @@ SliderTickRate:1
 [TimingPoints]
 0,500,4,2,1,100,1,0
 
+[Events]
+2,2200,2400
+
 [HitObjects]
 64,192,1000,1,0,0:0:0:0:
 256,192,1500,22,0,B|300:200|350:150,2,200
@@ -81,4 +84,5 @@ test('decodes hit objects into a parser-independent gameplay boundary', () => {
   assert.deepEqual(slider.tickPercentages, [0.7])
   assert.equal(slider.nodeSamples.length, 3)
   assert.equal(beatmap.spinners[0]?.endTime, 4_000)
+  assert.deepEqual(beatmap.breaks, [{ startTime: 2_200, endTime: 2_400 }])
 })

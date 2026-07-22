@@ -12,7 +12,7 @@
 
 ## PROGRESS (updated 2026-07-21)
 
-Repo: `/home/code/mcosu-ts` (git, `main`, 9 commits including this phase, 67 Node tests passing, `npm run build` clean). Implementation by Codex CLI; Claude verifies each increment against the C++ and dispatches the next.
+Repo: `/home/code/mcosu-ts` (git, `main`, 10 commits including this phase, 75 Node tests passing, `npm run build` clean). Implementation by Codex CLI; Claude verifies each increment against the C++ and dispatches the next.
 
 Done (commit — content):
 - `c296fb3` — phase 1 spike: Vite+TS scaffold, File System Access adapter (IndexedDB-persisted handle), OsuFile binary reader port, osu!.db parser, DOM song list + search.
@@ -22,11 +22,12 @@ Done (commit — content):
 - `2e0bc8e` — SliderCurves port (B/C/L/P, equal-distance), WebGL2 depth-trick slider bodies (shader ported from slider.mcshader; runtime-verified in headless Chromium: compiles, draws, 0 GL errors), snaking, ticks, repeat arrows, slider ball.
 - `509cf02` — playable: input queue (Z/X + pointer, coalesced/rawupdate), circle/slider/spinner judgment ports (notelock w/ 3ms 2B tolerance, follow-radius 1x/2.4x, tail −36ms), ScoreV1 + accuracy, WebAudio hitsounds w/ pan, HUD, results overlay.
 - `4715b08` — ConVar registry + backtick console (localStorage persist, McOsu names/defaults), stacking port (modern+legacy branches), mods EZ/HR/HD/NF/DT/NC/HT/Auto with exact factors, universal/local offsets (signs match `OsuBeatmap.cpp:581`).
-- phase 4b (this commit) — lazy/cached no-mod stars and live/final pp via `osu-standard-stable`, exact McOsu grades, read-only osu!stable + McOsu custom `scores.db` parsing, selected-map top local scores.
+- `d587247` — phase 4b: lazy/cached no-mod stars and live/final pp via `osu-standard-stable`, exact McOsu grades, read-only osu!stable + McOsu custom `scores.db` parsing, selected-map top local scores.
+- phase 5a (this commit) — stable HP drain calibration/gains, NF/Auto fail suppression, HP HUD, 2.25s browser fail slowdown, pause/retry/quit flow, full ranking statistics, and browser-local completed scores.
 
-**Next up (phase 5)**: ranking/pause polish, .osr replays via osu-parsers, collections, HP drain/fail, then phase 6 Tauri wrap.
+**Next up (phase 5b)**: .osr replays via osu-parsers, collections, options polish, and real-folder browser parity testing, then phase 6 Tauri wrap.
 
-Known gaps: scores.db write support is deferred; Flashlight gameplay is not implemented (grade API already supports silver FL grades); no default-skin audio is bundled (silent hitsounds without user skin); NF is score-multiplier-only (no fail system yet); no HP drain; spinner visuals remain a placeholder; no manual browser playtest with a real osu! folder yet (needs Chromium + user gesture).
+Known gaps: scores.db write support is deferred (new browser plays are stored separately in localStorage); Flashlight and Relax gameplay are not implemented; no default-skin audio is bundled (silent hitsounds without user skin); browser fail slowdown approximates McOsu frequency control with playbackRate; spinner visuals remain a placeholder; no manual browser playtest with a real osu! folder yet (needs Chromium + user gesture).
 
 ## Context
 

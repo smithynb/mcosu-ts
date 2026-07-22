@@ -42,3 +42,17 @@ export const osuHitWindow50Min = integer('osu_hitwindow_50_min', 200)
 export const osuHitWindow50Mid = integer('osu_hitwindow_50_mid', 150)
 export const osuHitWindow50Max = integer('osu_hitwindow_50_max', 100)
 export const osuHitWindowMiss = integer('osu_hitwindow_miss', 400)
+
+// OsuBeatmap.cpp:107,113-126 and OsuScore.cpp:36. Drain type 2 is the
+// corrected osu!stable algorithm McOsu enables by default.
+export const osuFailTime = float('osu_fail_time', 2.25, 'Seconds used by the fail slowdown animation.')
+export const osuDrainType = integer('osu_drain_type', 2, 'HP drain algorithm: 0 off, 1 VR, 2 stable, 3 lazer 2020, 4 lazer 2018.')
+export const osuDrainKill = bool('osu_drain_kill', true, 'Stop gameplay after health reaches zero.')
+export const osuDrainKillNotificationDuration = float('osu_drain_kill_notification_duration', 1)
+export const osuDrainStablePassiveFail = bool('osu_drain_stable_passive_fail', false, 'Allow passive stable drain to trigger failure.')
+export const osuDrainStableBreakBefore = bool('osu_drain_stable_break_before', false)
+export const osuDrainStableBreakBeforeOld = bool('osu_drain_stable_break_before_old', true)
+export const osuDrainStableBreakAfter = bool('osu_drain_stable_break_after', false)
+export const osuDrainStableSpinnerNerf = float('osu_drain_stable_spinner_nerf', 0.25)
+export const osuDrainStableHpBarMaximum = float('osu_drain_stable_hpbar_maximum', 200)
+export const osuDrainStableHpBarRecovery = float('osu_drain_stable_hpbar_recovery', 160)

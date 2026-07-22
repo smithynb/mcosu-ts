@@ -124,3 +124,32 @@ test('BeatmapClock exposes waiting, playing, and post-song virtual time', () => 
   now += 250
   assert.equal(clock.update(), 90_250)
 })
+
+test('BeatmapClock freezes and resumes each virtual state without drift', () => {
+  let now = 1_000
+  const audio = new QuantizedAudio(() => now)
+  const interpolated = new InterpolatedClock(audio, () => now)
+  const clock = new BeatmapClock(audio, interpolated, () => now)
+  clock.startWaiting(500)
+  const waiting = clock.pause()
+  assert.equal(clock.state, BeatmapClockState.PAUSED)
+  now += 2_000
+  assert.equal(clock.update(), waiting)
+  clock.resume()
+  assert.equal(clock.state, BeatmapClockState.WAITING)
+  assert.equal(clock.update(), waiting)
+
+  clock.startPlaying()
+  const playing = clock.pause()
+  audio.playing = false
+  now += 1_000
+  assert.equal(clock.update(), playing)
+  clock.resume()
+  assert.equal(clock.state, BeatmapClockState.PLAYING)
+
+  clock.finish()
+  const finished = clock.pause()
+  now += 500
+  clock.resume()
+  assert.equal(clock.update(), finished)
+})

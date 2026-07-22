@@ -105,6 +105,7 @@ export const BeatmapClockState = {
   WAITING: 'WAITING',
   PLAYING: 'PLAYING',
   FINISHED: 'FINISHED',
+  PAUSED: 'PAUSED',
 } as const
 
 export type BeatmapClockState = typeof BeatmapClockState[keyof typeof BeatmapClockState]
@@ -118,6 +119,9 @@ export class BeatmapClock {
   #waitUntil = 0
   #finishedAt = 0
   #finishedLength = 0
+  #pausedFrom: Exclude<BeatmapClockState, 'PAUSED'> = BeatmapClockState.WAITING
+  #pausedAt = 0
+  #pausedPosition = 0
 
   constructor(
     source: AudioClockSource,
@@ -151,8 +155,28 @@ export class BeatmapClock {
     this.#finishedLength = this.#source.getLengthMS()
   }
 
+  pause(): number {
+    // OsuBeatmap.cpp:1523-1595 pauses the audio-backed timeline as one unit.
+    if (this.#state === BeatmapClockState.PAUSED) return this.#pausedPosition
+    this.#pausedPosition = this.update()
+    this.#pausedFrom = this.#state
+    this.#pausedAt = this.#now()
+    this.#state = BeatmapClockState.PAUSED
+    return this.#pausedPosition
+  }
+
+  resume(): void {
+    if (this.#state !== BeatmapClockState.PAUSED) return
+    const pausedDuration = this.#now() - this.#pausedAt
+    if (this.#pausedFrom === BeatmapClockState.WAITING) this.#waitUntil += pausedDuration
+    else if (this.#pausedFrom === BeatmapClockState.FINISHED) this.#finishedAt += pausedDuration
+    else this.#interpolated.markSeek()
+    this.#state = this.#pausedFrom
+  }
+
   update(isLoading = false): number {
     const realTime = this.#now()
+    if (this.#state === BeatmapClockState.PAUSED) return this.#pausedPosition
     if (this.#state === BeatmapClockState.WAITING) {
       // OsuBeatmap.cpp:471-505 pins the wait origin while loading and scales
       // the negative virtual position by the gameplay speed.

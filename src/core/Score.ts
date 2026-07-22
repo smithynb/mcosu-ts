@@ -19,6 +19,8 @@ export interface ScoreSnapshot {
   readonly count100: number
   readonly count50: number
   readonly countMiss: number
+  readonly countGeki: number
+  readonly countKatu: number
 }
 
 export class Score {
@@ -31,6 +33,8 @@ export class Score {
   #count100 = 0
   #count50 = 0
   #countMiss = 0
+  #countGeki = 0
+  #countKatu = 0
 
   constructor(difficulty: ScoreDifficulty) {
     const playable = Math.max(0, difficulty.playableLengthMS)
@@ -88,6 +92,11 @@ export class Score {
     this.#score += bonus ? 1_100 : 100
   }
 
+  addComboEnd(result: 'geki' | 'katu'): void {
+    if (result === 'geki') this.#countGeki += 1
+    else this.#countKatu += 1
+  }
+
   snapshot(): ScoreSnapshot {
     const total = this.#count300 + this.#count100 + this.#count50 + this.#countMiss
     const accuracy = total === 0
@@ -102,6 +111,8 @@ export class Score {
       count100: this.#count100,
       count50: this.#count50,
       countMiss: this.#countMiss,
+      countGeki: this.#countGeki,
+      countKatu: this.#countKatu,
     }
   }
 

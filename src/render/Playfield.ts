@@ -398,6 +398,15 @@ export class CanvasPlayfield implements PlayfieldRenderer {
 
     const score = gameplay.snapshot.score
     this.#context.save()
+    const hpWidth = Math.min(320, this.#canvas.clientWidth * 0.34)
+    const hpX = 24
+    const hpY = 22
+    this.#context.fillStyle = 'rgba(0,0,0,.55)'
+    this.#context.fillRect(hpX, hpY, hpWidth, 10)
+    this.#context.fillStyle = gameplay.snapshot.health.health < 0.25 ? '#ff6578' : '#e967a1'
+    this.#context.fillRect(hpX, hpY, hpWidth * gameplay.snapshot.health.health, 10)
+    this.#context.strokeStyle = 'rgba(255,255,255,.75)'
+    this.#context.strokeRect(hpX, hpY, hpWidth, 10)
     this.#context.fillStyle = '#fff'
     this.#context.textBaseline = 'bottom'
     this.#context.shadowColor = 'rgba(0,0,0,.75)'

@@ -7,6 +7,26 @@ import type { LoadedSkin } from '../skin/Skin.ts'
 import { calculateGrade } from '../core/Grade.ts'
 import type { ModdedGameplayBeatmap } from '../core/Mods.ts'
 import type { StandardPerformanceContext } from '../core/StandardPerformance.ts'
+import { FailAnimation } from '../core/Health.ts'
+import { osuFailTime } from '../core/ConVars.ts'
+import type { GameplaySnapshot } from '../core/GameplaySession.ts'
+
+export interface RankingResult {
+  readonly snapshot: GameplaySnapshot
+  readonly grade: ReturnType<typeof calculateGrade>
+  readonly pp: number
+  readonly failed: boolean
+  readonly interactive: boolean
+}
+
+export interface PlayfieldCallbacks {
+  readonly onSpeedChange: (speed: number) => void
+  readonly onPauseChange: (paused: boolean) => void
+  readonly onRetry: () => void
+  readonly onQuit: () => void
+  readonly onFailProgress: (progress: number, finished: boolean) => void
+  readonly onComplete: (result: RankingResult) => void
+}
 
 export class PlayfieldView {
   readonly #root: HTMLDivElement
@@ -23,8 +43,14 @@ export class PlayfieldView {
   #livePp = 0
   #lastPpKey = ''
   #lastPositionMS = Number.NEGATIVE_INFINITY
+  readonly #callbacks: PlayfieldCallbacks
+  #paused = false
+  #completed = false
+  #failAnimation: FailAnimation | null = null
+  #lastSpeed = 1
 
-  constructor(onSpeedChange: (speed: number) => void) {
+  constructor(callbacks: PlayfieldCallbacks) {
+    this.#callbacks = callbacks
     this.#root = document.createElement('div')
     this.#root.className = 'playfield-overlay'
     this.#root.hidden = true
@@ -50,23 +76,37 @@ export class PlayfieldView {
         <canvas class="playfield-sprite-layer" aria-label="Passive osu! playfield"></canvas>
       </div>
       <section id="play-results" class="play-results" hidden></section>
+      <section id="pause-menu" class="pause-menu" hidden>
+        <p class="eyebrow">paused</p><h3>Gameplay paused</h3>
+        <div><button type="button" data-pause-action="continue">Continue</button><button type="button" data-pause-action="retry">Retry</button><button type="button" data-pause-action="quit">Quit</button></div>
+      </section>
     `
     this.#canvas = required<HTMLCanvasElement>(this.#root, '.playfield-sprite-layer')
     this.#position = required<HTMLOutputElement>(this.#root, '#watch-position')
-    required<HTMLButtonElement>(this.#root, '#watch-close').addEventListener('click', () => this.close())
     for (const button of this.#root.querySelectorAll<HTMLButtonElement>('[data-watch-speed]')) {
       button.addEventListener('click', () => {
         const speed = Number(button.dataset.watchSpeed)
         if (!Number.isFinite(speed)) return
-        onSpeedChange(speed)
+        callbacks.onSpeedChange(speed)
         for (const peer of this.#root.querySelectorAll<HTMLButtonElement>('[data-watch-speed]')) {
           peer.setAttribute('aria-pressed', String(Number(peer.dataset.watchSpeed) === speed))
         }
       })
     }
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && !this.#root.hidden) this.close()
+      if (event.key !== 'Escape' || this.#root.hidden || this.#mode !== 'play' || this.#completed || this.#failAnimation?.active === true) return
+      event.preventDefault()
+      this.#setPaused(!this.#paused)
     })
+    for (const button of this.#root.querySelectorAll<HTMLButtonElement>('[data-pause-action]')) {
+      button.addEventListener('click', () => {
+        const action = button.dataset.pauseAction
+        if (action === 'continue') this.#setPaused(false)
+        else if (action === 'retry') this.#retry()
+        else if (action === 'quit') this.#quit()
+      })
+    }
+    required<HTMLButtonElement>(this.#root, '#watch-close').onclick = () => this.#quit()
     document.body.append(this.#root)
   }
 
@@ -92,6 +132,10 @@ export class PlayfieldView {
     this.#performance = options.performance ?? null
     this.#session = new GameplaySession(beatmap, { autoplay: this.#mode === 'watch' })
     this.#lastPositionMS = Number.NEGATIVE_INFINITY
+    this.#paused = false
+    this.#completed = false
+    this.#failAnimation = null
+    required<HTMLElement>(this.#root, '#pause-menu').hidden = true
     this.#hitSounds = options.hitSounds ?? null
     void this.#hitSounds?.resume()
     window.addEventListener('keydown', this.#resumeAudio, { once: true })
@@ -114,6 +158,7 @@ export class PlayfieldView {
       required<HTMLElement>(this.#root, '#play-results').hidden = true
     }
     this.#session.setSpeedMultiplier(speedMultiplier)
+    this.#lastSpeed = speedMultiplier
     this.#lastPositionMS = positionMS
     this.#position.value = `${positionMS.toFixed(3)} ms`
     const input = this.#input?.consume(positionMS, frameTimeStamp, speedMultiplier) ?? emptyInput(this.#lastCursor)
@@ -132,13 +177,14 @@ export class PlayfieldView {
       pp: this.#performance === null ? undefined : this.#livePp,
       ppUnranked: mods?.Auto === true,
     })
-    const results = required<HTMLElement>(this.#root, '#play-results')
-    if (snapshot.finished) {
-      const score = snapshot.score
-      const grade = calculateGrade(score, { hidden: mods?.HD === true })
-      const pp = mods?.Auto === true ? 'unranked' : `${this.#livePp.toFixed(2)} pp`
-      results.hidden = false
-      results.innerHTML = `<p class="eyebrow">results</p><h3>${grade} · ${String(score.score).padStart(8, '0')}</h3><dl><div><dt>300</dt><dd>${score.count300}</dd></div><div><dt>100</dt><dd>${score.count100}</dd></div><div><dt>50</dt><dd>${score.count50}</dd></div><div><dt>miss</dt><dd>${score.countMiss}</dd></div><div><dt>max combo</dt><dd>${score.maxCombo}×</dd></div><div><dt>accuracy</dt><dd>${(score.accuracy * 100).toFixed(2)}%</dd></div><div><dt>performance</dt><dd>${pp}</dd></div></dl>`
+    if (snapshot.failed && !this.#completed) {
+      this.#failAnimation ??= new FailAnimation(osuFailTime.getFloat() * 1_000)
+      this.#failAnimation.start(frameTimeStamp)
+      const progress = this.#failAnimation.progress(frameTimeStamp)
+      this.#callbacks.onFailProgress(progress, progress >= 1)
+      if (progress >= 1) this.#showRanking(snapshot, true)
+    } else if (snapshot.finished) {
+      this.#showRanking(snapshot, false)
     }
   }
 
@@ -161,8 +207,55 @@ export class PlayfieldView {
     this.#livePp = 0
     this.#renderer = null
     this.#lastPositionMS = Number.NEGATIVE_INFINITY
+    this.#paused = false
+    this.#completed = false
+    this.#failAnimation = null
     required<HTMLElement>(this.#root, '#play-results').hidden = true
     this.#root.hidden = true
+  }
+
+  #showRanking(snapshot: GameplaySnapshot, failed: boolean): void {
+    if (this.#completed) return
+    this.#completed = true
+    const score = snapshot.score
+    const mods = (this.#beatmap as Partial<ModdedGameplayBeatmap> | null)?.mods
+    const grade = calculateGrade(score, { hidden: mods?.HD === true })
+    const ppText = mods?.Auto === true ? 'unranked' : `${this.#livePp.toFixed(2)} pp`
+    const modText = mods === undefined ? 'NM' : Object.entries(mods).filter(([, enabled]) => enabled).map(([name]) => name).join('') || 'NM'
+    const heading = failed ? 'map failed' : 'ranking'
+    const results = required<HTMLElement>(this.#root, '#play-results')
+    results.hidden = false
+    results.innerHTML = `<p class="eyebrow">${heading}</p><h3>${grade} · ${String(score.score).padStart(8, '0')}</h3><dl><div><dt>300</dt><dd>${score.count300}</dd></div><div><dt>100</dt><dd>${score.count100}</dd></div><div><dt>50</dt><dd>${score.count50}</dd></div><div><dt>miss</dt><dd>${score.countMiss}</dd></div><div><dt>geki</dt><dd>${score.countGeki}</dd></div><div><dt>katu</dt><dd>${score.countKatu}</dd></div><div><dt>max combo</dt><dd>${score.maxCombo}×</dd></div><div><dt>accuracy</dt><dd>${(score.accuracy * 100).toFixed(2)}%</dd></div><div><dt>performance</dt><dd>${ppText}</dd></div><div><dt>mods</dt><dd>${modText}</dd></div><div><dt>mean error</dt><dd>${snapshot.hitErrorMean.toFixed(2)} ms</dd></div><div><dt>unstable rate</dt><dd>${snapshot.unstableRate.toFixed(2)}</dd></div><div><dt>pauses</dt><dd>${snapshot.pauseCount}</dd></div></dl><div class="ranking-actions"><button type="button" data-ranking-action="retry">Retry</button><button type="button" data-ranking-action="back">Back</button></div>`
+    required<HTMLButtonElement>(results, '[data-ranking-action="retry"]').onclick = () => this.#retry()
+    required<HTMLButtonElement>(results, '[data-ranking-action="back"]').onclick = () => this.#quit()
+    this.#callbacks.onComplete({ snapshot, grade, pp: this.#livePp, failed, interactive: this.#mode === 'play' })
+  }
+
+  #setPaused(paused: boolean): void {
+    if (this.#paused === paused || this.#session === null) return
+    this.#paused = paused
+    if (paused) this.#session.notePause()
+    required<HTMLElement>(this.#root, '#pause-menu').hidden = !paused
+    this.#callbacks.onPauseChange(paused)
+  }
+
+  #retry(): void {
+    if (this.#beatmap === null) return
+    this.#paused = false
+    this.#completed = false
+    this.#failAnimation = null
+    this.#session = new GameplaySession(this.#beatmap, { autoplay: this.#mode === 'watch', speedMultiplier: this.#lastSpeed })
+    this.#lastPositionMS = Number.NEGATIVE_INFINITY
+    this.#lastPpKey = ''
+    this.#livePp = 0
+    required<HTMLElement>(this.#root, '#pause-menu').hidden = true
+    required<HTMLElement>(this.#root, '#play-results').hidden = true
+    this.#callbacks.onRetry()
+  }
+
+  #quit(): void {
+    this.close()
+    this.#callbacks.onQuit()
   }
 
   readonly #resumeAudio = (): void => {

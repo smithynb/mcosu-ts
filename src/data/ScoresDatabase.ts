@@ -2,9 +2,10 @@ import { calculateGrade, type Grade } from '../core/Grade.ts'
 import { OsuFile, OsuFileFormatError } from './OsuFile.ts'
 
 export type ScoresDatabaseFormat = 'stable' | 'mcosu'
+export type LocalScoreSource = ScoresDatabaseFormat | 'browser'
 
 export interface LocalScore {
-  readonly source: ScoresDatabaseFormat
+  readonly source: LocalScoreSource
   readonly md5: string
   readonly version: number
   readonly playerName: string

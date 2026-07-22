@@ -16,6 +16,8 @@ test('score v1, combo, counts, and accuracy match McOsu arithmetic', () => {
   score.addJudgment('300')
   score.addJudgment('100')
   score.addJudgment('50')
+  score.addComboEnd('geki')
+  score.addComboEnd('katu')
   assert.deepEqual(score.snapshot(), {
     // Third result: 50 + floor(50 * (combo 2 - 1) * 3 / 25) = 56.
     score: 456,
@@ -27,6 +29,8 @@ test('score v1, combo, counts, and accuracy match McOsu arithmetic', () => {
     count100: 1,
     count50: 1,
     countMiss: 0,
+    countGeki: 1,
+    countKatu: 1,
   })
 
   score.sliderBreak()

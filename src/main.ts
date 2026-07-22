@@ -30,7 +30,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="pulse" aria-hidden="true"></span>
         <span>mcosu</span><span class="wordmark-suffix">.ts</span>
       </div>
-      <p class="phase">stars, pp & local scores / phase 04b</p>
+      <p class="phase">health, pause & ranking / phase 05a</p>
     </header>
 
     <section class="intro" aria-labelledby="page-title">

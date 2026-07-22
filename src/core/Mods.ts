@@ -64,6 +64,19 @@ export function modPitchPreserved(mods: GameplayMods): boolean {
   return !mods.NC
 }
 
+export function modsToLegacy(mods: GameplayMods): number {
+  let result = 0
+  if (mods.NF) result |= 1
+  if (mods.EZ) result |= 2
+  if (mods.HD) result |= 8
+  if (mods.HR) result |= 16
+  if (mods.DT) result |= 64
+  if (mods.HT) result |= 256
+  if (mods.NC) result |= 512 | 64
+  if (mods.Auto) result |= 2048
+  return result
+}
+
 // OsuBeatmap.cpp:581-587: universal is added after scaling by speed; local is subtracted.
 export function musicPositionWithOffsets(
   musicPositionMS: number,

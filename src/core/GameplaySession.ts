@@ -10,6 +10,7 @@ import {
   osuSliderEndInsideCheckOffset,
   osuSliderFollowCircleSizeMultiplier,
 } from './ConVars.ts'
+import { HealthSystem, type HealthSnapshot } from './Health.ts'
 
 
 export interface GameplayClick {
@@ -56,6 +57,11 @@ export interface GameplaySnapshot {
   readonly finished: boolean
   readonly objectResults: readonly (HitResult | null)[]
   readonly events: readonly GameplayEvent[]
+  readonly health: HealthSnapshot
+  readonly failed: boolean
+  readonly pauseCount: number
+  readonly hitErrorMean: number
+  readonly unstableRate: number
 }
 
 interface CircleState {
@@ -103,9 +109,12 @@ export class GameplaySession {
   readonly #score: Score
   readonly #radius: number
   readonly #autoplay: boolean
+  readonly #health: HealthSystem
   #speedMultiplier: number
   #previousPositionMS = Number.NEGATIVE_INFINITY
   #events: GameplayEvent[] = []
+  #pauseCount = 0
+  readonly #hitErrors: number[] = []
 
   constructor(beatmap: GameplayBeatmap, options: { autoplay?: boolean; speedMultiplier?: number } = {}) {
     this.#beatmap = beatmap
@@ -122,10 +131,12 @@ export class GameplaySession {
       modMultiplier: (beatmap as Partial<ModdedGameplayBeatmap>).scoreMultiplier,
     })
     this.#states = beatmap.objects.map((object) => this.#createState(object))
+    this.#health = new HealthSystem(beatmap, { mods: (beatmap as Partial<ModdedGameplayBeatmap>).mods })
   }
 
   update(positionMS: number, input: GameplayFrameInput): GameplaySnapshot {
     this.#events = []
+    if (this.#health.snapshot().failed) return this.snapshot()
     const effective = this.#autoplay ? this.#autoplayInput(positionMS, input.position) : input
     const clicks = [...effective.clicks]
     let blockNextNotes = false
@@ -160,16 +171,35 @@ export class GameplaySession {
     }
 
     this.#previousPositionMS = positionMS
+    const before = this.#health.snapshot()
+    const health = this.#health.update(positionMS, this.#events, this.#speedMultiplier)
+    for (let count = before.countGeki; count < health.countGeki; count += 1) this.#score.addComboEnd('geki')
+    for (let count = before.countKatu; count < health.countKatu; count += 1) this.#score.addComboEnd('katu')
+    for (const event of this.#events) {
+      if (event.type === 'judgment' && event.result !== 'miss') this.#hitErrors.push(event.delta)
+    }
     return this.snapshot()
   }
 
   snapshot(): GameplaySnapshot {
+    const health = this.#health.snapshot()
+    const mean = this.#hitErrors.length === 0 ? 0 : this.#hitErrors.reduce((total, value) => total + value, 0) / this.#hitErrors.length
+    const variance = this.#hitErrors.length === 0 ? 0 : this.#hitErrors.reduce((total, value) => total + (value - mean) ** 2, 0) / this.#hitErrors.length
     return {
       score: this.#score.snapshot(),
-      finished: this.#states.every((state) => this.#isFinished(state)),
+      finished: !health.failed && this.#states.every((state) => this.#isFinished(state)),
       objectResults: this.#states.map((state) => state.kind === 'slider' ? state.result : state.result),
       events: this.#events,
+      health,
+      failed: health.failed,
+      pauseCount: this.#pauseCount,
+      hitErrorMean: mean,
+      unstableRate: Math.sqrt(variance) * 10,
     }
+  }
+
+  notePause(): void {
+    this.#pauseCount += 1
   }
 
   setSpeedMultiplier(speedMultiplier: number): void {

@@ -17,6 +17,8 @@ import {
   type GameplayMod,
 } from '../core/Mods.ts'
 import { createStandardPerformance } from '../core/StandardPerformance.ts'
+import { LocalPlayStore } from '../data/LocalPlayStore.ts'
+import type { RankingResult } from './PlayfieldView.ts'
 
 interface JitterSample {
   readonly at: number
@@ -63,10 +65,20 @@ export class PlayerPanel {
   #mods: Record<GameplayMod, boolean> = { ...NO_MODS }
   #scoreIndex: ReadonlyMap<string, readonly LocalScore[]> | null = null
   #scoreStatus = 'Local scores are loading…'
+  readonly #localPlayStore = new LocalPlayStore()
+  #baseScores: readonly LocalScore[] = []
+  #playId = ''
 
   constructor(root: HTMLElement) {
     this.#root = root
-    this.#playfieldView = new PlayfieldView((speed) => this.#setSpeed(speed))
+    this.#playfieldView = new PlayfieldView({
+      onSpeedChange: (speed) => this.#setSpeed(speed),
+      onPauseChange: (paused) => void this.#setGameplayPaused(paused),
+      onRetry: () => void this.#retryGameplay(),
+      onQuit: () => this.#quitGameplay(),
+      onFailProgress: (progress, finished) => this.#updateFailAudio(progress, finished),
+      onComplete: (result) => this.#saveCompletedPlay(result),
+    })
     root.innerHTML = `
       <div class="player-heading">
         <div>
@@ -228,7 +240,8 @@ export class PlayerPanel {
     index: ReadonlyMap<string, readonly LocalScore[]> | null,
     status = index === null ? 'Local scores are loading…' : 'No local scores for this beatmap.',
   ): void {
-    this.#scoreIndex = index
+    this.#baseScores = index === null ? [] : [...index.values()].flat()
+    this.#scoreIndex = index === null ? null : this.#localPlayStore.mergedIndex(this.#baseScores)
     this.#scoreStatus = status
     this.#renderLocalScores()
   }
@@ -274,6 +287,7 @@ export class PlayerPanel {
         `${beatmap.artist} — ${beatmap.title} [${beatmap.difficultyName}]`,
         { mode, hitSounds, performance },
       )
+      this.#playId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
       if (mode === 'play' && this.#player !== null && this.#beatmapClock !== null) {
         this.#player.setPositionMS(0)
         this.#beatmapClock.startPlaying()
@@ -459,13 +473,82 @@ export class PlayerPanel {
       heading.textContent = `${score.grade} · ${formatScore(score.score)}`
       const detail = document.createElement('span')
       const pp = score.pp !== undefined && score.pp > 0 ? ` · ${score.pp.toFixed(2)} pp` : ''
-      detail.textContent = `${score.playerName || 'Unknown'} · ${score.maxCombo}× · ${(score.accuracy * 100).toFixed(2)}% · ${score.modAcronyms}${pp}`
+      const source = score.source === 'browser' ? 'browser' : score.source
+      detail.textContent = `${score.playerName || 'Unknown'} · ${score.maxCombo}× · ${(score.accuracy * 100).toFixed(2)}% · ${score.modAcronyms}${pp} · ${source}`
       const date = document.createElement('time')
       date.dateTime = score.playedAt.toISOString()
       date.textContent = score.playedAt.toLocaleDateString()
       item.append(heading, detail, date)
       this.#localScores.append(item)
     }
+  }
+
+  async #setGameplayPaused(paused: boolean): Promise<void> {
+    if (this.#player === null || this.#beatmapClock === null) return
+    if (paused) {
+      this.#beatmapClock.pause()
+      this.#player.pause()
+      this.#playButton.textContent = 'Play'
+      this.#setStatus('Gameplay paused.')
+    } else {
+      this.#beatmapClock.resume()
+      this.#player.setSpeed(this.#speed)
+      try { await this.#player.play() } catch (error) { this.#setStatus(error instanceof Error ? error.message : 'Could not resume.', true) }
+      this.#playButton.textContent = 'Pause'
+      this.#setStatus('Gameplay resumed.')
+    }
+  }
+
+  async #retryGameplay(): Promise<void> {
+    if (this.#player === null || this.#beatmapClock === null) return
+    this.#player.pause()
+    this.#player.setSpeed(this.#speed)
+    this.#player.setPositionMS(0)
+    this.#beatmapClock.startPlaying()
+    this.#playId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    try { await this.#player.play() } catch (error) { this.#setStatus(error instanceof Error ? error.message : 'Could not retry.', true) }
+    this.#playButton.textContent = 'Pause'
+    this.#setStatus('Retry started.')
+  }
+
+  #quitGameplay(): void {
+    this.#player?.pause()
+    this.#beatmapClock?.pause()
+    this.#player?.setSpeed(this.#speed)
+    this.#playButton.textContent = 'Play'
+    this.#setStatus('Returned from gameplay.')
+  }
+
+  #updateFailAudio(progress: number, finished: boolean): void {
+    if (this.#player === null) return
+    // McOsu changes backend frequency; HTMLAudioElement only exposes playbackRate.
+    this.#player.setSpeed(Math.max(0.25, this.#speed * (1 - progress)))
+    if (finished) {
+      this.#player.pause()
+      this.#beatmapClock?.pause()
+      this.#setStatus('Map failed.')
+    }
+  }
+
+  #saveCompletedPlay(result: RankingResult): void {
+    const beatmap = this.#beatmap
+    if (result.interactive) {
+      this.#player?.pause()
+      this.#beatmapClock?.pause()
+      this.#playButton.textContent = 'Replay'
+    }
+    if (beatmap === null || !result.interactive || result.failed || this.#mods.Auto || beatmap.md5.length === 0) return
+    this.#localPlayStore.add({
+      id: this.#playId,
+      md5: beatmap.md5,
+      playerName: 'Local Player',
+      score: result.snapshot.score,
+      pp: result.pp,
+      mods: this.#mods,
+      playedAt: new Date(),
+    })
+    this.#scoreIndex = this.#localPlayStore.mergedIndex(this.#baseScores)
+    this.#renderLocalScores()
   }
 
   #setStatus(message: string, error = false): void {

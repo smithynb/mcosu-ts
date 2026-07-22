@@ -66,6 +66,11 @@ export interface GameplaySpinner extends GameplayObjectBase {
 
 export type GameplayObject = GameplayCircle | GameplaySlider | GameplaySpinner
 
+export interface GameplayBreak {
+  readonly startTime: number
+  readonly endTime: number
+}
+
 export interface GameplayBeatmap {
   readonly fileVersion: number
   readonly stackLeniency: number
@@ -77,6 +82,7 @@ export interface GameplayBeatmap {
   readonly sliderTickRate: number
   readonly playableLengthMS: number
   readonly breakLengthMS: number
+  readonly breaks: readonly GameplayBreak[]
   readonly circles: readonly GameplayCircle[]
   readonly sliders: readonly GameplaySlider[]
   readonly spinners: readonly GameplaySpinner[]
@@ -213,6 +219,7 @@ export function parseGameplayBeatmap(text: string): GameplayBeatmap {
       ? 0
       : objectEndTime(objects.at(-1)!) - objects[0]!.time,
     breakLengthMS: decoded.events.breaks.reduce((total, event) => total + event.duration, 0),
+    breaks: decoded.events.breaks.map((event) => ({ startTime: event.startTime, endTime: event.endTime })),
     circles,
     sliders,
     spinners,

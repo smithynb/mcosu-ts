@@ -620,6 +620,25 @@ code {
   font-weight: 750;
 }
 
+.pause-menu {
+  position: fixed;
+  z-index: 4;
+  top: 50%;
+  left: 50%;
+  width: min(440px, calc(100% - 40px));
+  padding: 32px;
+  border: 1px solid rgb(255 255 255 / 0.24);
+  background: rgb(10 12 18 / 0.96);
+  box-shadow: 0 30px 100px rgb(0 0 0 / 0.75);
+  transform: translate(-50%, -50%);
+}
+
+.pause-menu h3 { margin: 8px 0 24px; font-size: 2rem; }
+.pause-menu > div,
+.ranking-actions { display: flex; gap: 10px; margin-top: 22px; }
+.pause-menu button,
+.ranking-actions button { flex: 1; }
+
 .clock-console {
   display: grid;
   grid-template-columns: 1fr 1fr;
