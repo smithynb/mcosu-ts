@@ -1,10 +1,12 @@
 # mcosu-ts
 
-`mcosu-ts` is a browser-first TypeScript spike for reading an existing osu!stable song library. It asks you to select the osu! installation folder, reads `osu!.db` locally, and displays a searchable list of osu!standard beatmaps. If the database is missing or unusable, it automatically scans metadata from `Songs/*/*.osu`. No files are uploaded.
+`mcosu-ts` is a browser-first TypeScript port for reading and playing an existing osu!stable song library, with an optional Tauri desktop shell. It asks you to select the osu! installation folder, reads `osu!.db` locally, and displays a searchable list of osu!standard beatmaps. If the database is missing or unusable, it automatically scans metadata from `Songs/*/*.osu`. No files are uploaded.
 
 ## Browser support
 
 Use a Chromium-based desktop browser that exposes the File System Access API's `showDirectoryPicker`, such as Chrome or Edge. Browsers without that API are reported as unsupported.
+
+The Tauri build uses its native folder dialog and does not require `showDirectoryPicker`, so Linux WebKitGTK is supported there. Both runtimes use the same application and `OsuFileSystem` boundary; only folder selection and file access differ.
 
 Select the osu! installation root—the folder containing both `osu!.db` and normally `Songs`—rather than the `Songs` folder itself. The browser stores the selected directory handle in IndexedDB. It may still ask you to restore permission after a restart; permission is requested only from a user action.
 
@@ -20,6 +22,21 @@ npm test
 ```
 
 The build and Node-only rules/database tests are deterministic and require no network access after dependencies are installed. `npm run test:db` remains an alias for the full suite.
+
+### Tauri desktop shell
+
+The optional Tauri v2 shell requires Rust plus the platform packages listed by Tauri. It leaves the browser commands above unchanged:
+
+```sh
+npm run tauri:dev
+npm run tauri:build
+cd src-tauri
+cargo check
+```
+
+The desktop adapter opens a native directory picker, canonicalizes the selected osu! root in Rust, and persists that path under the application's platform config directory. Every native read, listing, and existence query resolves relative to that root; traversal and symlink escapes are rejected before access. Browser selections continue to use IndexedDB instead.
+
+Automated/headless verification compiles the shell with `cargo check` and tests the root-confinement logic without launching a GUI. Platform bundles can be produced later on an interactive packaging host with `npm run tauri:build`.
 
 ### ConVars
 

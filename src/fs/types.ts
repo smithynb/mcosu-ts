@@ -17,16 +17,24 @@ declare global {
 
   interface Window {
     showDirectoryPicker(options?: { mode?: FileSystemPermissionMode }): Promise<FileSystemDirectoryHandle>
+    __TAURI_INTERNALS__?: unknown
   }
 }
 
 export interface DirectoryEntry {
   readonly name: string
-  readonly kind: FileSystemHandle['kind']
+  readonly kind: 'file' | 'directory'
+}
+
+export interface OsuFileSystem {
+  readonly root: { readonly name: string }
+  getFile(path: string): Promise<File>
+  listDir(path?: string): Promise<DirectoryEntry[]>
+  exists(path: string): Promise<boolean>
 }
 
 export interface ReconnectResult {
-  readonly fileSystem: import('./osuFileSystem').OsuFileSystem | null
+  readonly fileSystem: OsuFileSystem | null
   readonly hasStoredHandle: boolean
   readonly permission: FileSystemPermissionState | 'unsupported' | 'missing'
 }

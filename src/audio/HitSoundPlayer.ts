@@ -1,6 +1,6 @@
 import type { GameplayBeatmap, GameplaySample } from '../data/GameplayLoader.ts'
 import type { BeatmapEntry } from '../data/OsuDatabase.ts'
-import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import type { OsuFileSystem } from '../fs/types.ts'
 import { osuVolumeEffects } from '../core/ConVars.ts'
 
 interface LoadedSample {

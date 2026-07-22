@@ -10,9 +10,9 @@
 > `/home/code/McOsu` and dispatches the next phase. Per-phase implementation plans live in
 > `docs/superpowers/plans/`.
 
-## PROGRESS (updated 2026-07-21)
+## PROGRESS (updated 2026-07-22)
 
-Repo: `/home/code/mcosu-ts` (git, `main`, 14 commits including this increment, 94 Node tests passing, `npm run build` clean). Implementation by Codex CLI; Claude verifies each increment against the C++ and dispatches the next.
+Repo: `/home/code/mcosu-ts` (git, `main`, 15 commits including this increment, 100 Node tests passing, `npm run build` clean, Tauri Rust tests and `cargo check` clean). Implementation by Codex CLI; Claude verifies each increment against the C++ and dispatches the next.
 
 Done (commit — content):
 - `c296fb3` — phase 1 spike: Vite+TS scaffold, File System Access adapter (IndexedDB-persisted handle), OsuFile binary reader port, osu!.db parser, DOM song list + search.
@@ -27,11 +27,12 @@ Done (commit — content):
 - `76e4bf3` — phase 5b: `.osr` import/watch through ScoreV1 judgments, osu-compatible browser replay recording and local persistence, stable/custom collection parsing and filtering, replay actions, and local-best grade badges.
 - `40b2d72` — phase 5b corrections: collapse stable M/K duplicate replay bits into two logical input sides and skip malformed collection hashes like McOsu.
 - `d843a67` — McOsu-structured DOM options overlay backed directly by persisted ConVars for gameplay, skin/effects volume, input reference, and general runtime behavior.
-- phase 5d (this commit) — layered McOsu-style spinner visuals with procedural fallback, real `.osr` export through `ScoreEncoder`, McOsu custom `scores.db` write/export, and original generated default hitsounds.
+- `d600a9b` — phase 5d: layered McOsu-style spinner visuals with procedural fallback, real `.osr` export through `ScoreEncoder`, McOsu custom `scores.db` write/export, and original generated default hitsounds.
+- phase 6 (this commit) — Tauri v2 shell, runtime-selected native filesystem adapter, native folder dialog, app-config root persistence, and canonical Rust root confinement for reads/listings/existence checks while retaining the browser-first build.
 
-**Next up (phase 6)**: Tauri filesystem adapter and release wrapper, plus real-folder/replay parity testing on the native path.
+**Next up (release validation)**: package platform artifacts and run real-folder/replay parity checks through the native adapter on an interactive desktop.
 
-Known gaps: stable-format `scores.db` write and collection writes remain deferred (browser plays export through McOsu's custom score format); McOsu custom `collections.db` is visible only when it is inside the selected browser folder; Flashlight and Relax gameplay are not implemented; browser fail slowdown approximates McOsu frequency control with playbackRate; no manual parity run with a real osu! folder and stable replay yet (needs Chromium + user gesture).
+Known gaps: stable-format `scores.db` write and collection writes remain deferred (browser plays export through McOsu's custom score format); Flashlight and Relax gameplay are not implemented; browser fail slowdown approximates McOsu frequency control with playbackRate; no manual parity run with a real osu! folder and stable replay through the new native shell yet. Headless verification compiles the shell but intentionally does not launch WebKitGTK or produce AppImage bundles.
 
 ## Context
 

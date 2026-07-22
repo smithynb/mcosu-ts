@@ -1,5 +1,6 @@
-import { loadStoredRootHandle, storeRootHandle } from './idb'
-import type { DirectoryEntry, ReconnectResult } from './types'
+import { loadStoredRootHandle, storeRootHandle } from './idb.ts'
+import { relativePathSegments } from './paths.ts'
+import type { DirectoryEntry, OsuFileSystem, ReconnectResult } from './types.ts'
 
 const READ_PERMISSION = { mode: 'read' } as const
 
@@ -10,11 +11,15 @@ export function isFileSystemAccessSupported(): boolean {
   return typeof window.showDirectoryPicker === 'function' && typeof indexedDB !== 'undefined'
 }
 
-export class OsuFileSystem {
-  constructor(readonly root: FileSystemDirectoryHandle) {}
+export class BrowserOsuFileSystem implements OsuFileSystem {
+  readonly root: FileSystemDirectoryHandle
+
+  constructor(root: FileSystemDirectoryHandle) {
+    this.root = root
+  }
 
   async getFile(path: string): Promise<File> {
-    const segments = parsePath(path)
+    const segments = relativePathSegments(path)
     if (segments.length === 0) throw new Error('A file path is required.')
     const fileName = segments.pop()
     if (fileName === undefined) throw new Error('A file path is required.')
@@ -24,7 +29,7 @@ export class OsuFileSystem {
   }
 
   async listDir(path = ''): Promise<DirectoryEntry[]> {
-    const directory = await this.#resolveDirectory(parsePath(path))
+    const directory = await this.#resolveDirectory(relativePathSegments(path))
     const entries: DirectoryEntry[] = []
     for await (const handle of directory.values()) {
       entries.push({ name: handle.name, kind: handle.kind })
@@ -33,7 +38,7 @@ export class OsuFileSystem {
   }
 
   async exists(path: string): Promise<boolean> {
-    const segments = parsePath(path)
+    const segments = relativePathSegments(path)
     if (segments.length === 0) return true
     const name = segments.pop()
     if (name === undefined) return true
@@ -68,11 +73,11 @@ export class OsuFileSystem {
   }
 }
 
-export async function selectOsuFolder(): Promise<OsuFileSystem> {
+export async function selectBrowserOsuFolder(): Promise<OsuFileSystem> {
   assertSupported()
   const handle = await window.showDirectoryPicker({ mode: 'read' })
   await storeRootHandle(handle)
-  return new OsuFileSystem(handle)
+  return new BrowserOsuFileSystem(handle)
 }
 
 /**
@@ -80,7 +85,7 @@ export async function selectOsuFolder(): Promise<OsuFileSystem> {
  * downgrade persisted permissions between visits, so callers should first try
  * without a prompt and retry with `requestPermission: true` from a click.
  */
-export async function reconnectOsuFolder(requestPermission = false): Promise<ReconnectResult> {
+export async function reconnectBrowserOsuFolder(requestPermission = false): Promise<ReconnectResult> {
   if (!isFileSystemAccessSupported()) {
     return { fileSystem: null, hasStoredHandle: false, permission: 'unsupported' }
   }
@@ -96,7 +101,7 @@ export async function reconnectOsuFolder(requestPermission = false): Promise<Rec
   }
 
   return {
-    fileSystem: permission === 'granted' ? new OsuFileSystem(handle) : null,
+    fileSystem: permission === 'granted' ? new BrowserOsuFileSystem(handle) : null,
     hasStoredHandle: true,
     permission,
   }
@@ -104,15 +109,6 @@ export async function reconnectOsuFolder(requestPermission = false): Promise<Rec
 
 function assertSupported(): void {
   if (!isFileSystemAccessSupported()) throw new Error(UNSUPPORTED_BROWSER_MESSAGE)
-}
-
-function parsePath(path: string): string[] {
-  const normalized = path.replaceAll('\\', '/')
-  const segments = normalized.split('/').filter((segment) => segment.length > 0)
-  if (segments.some((segment) => segment === '.' || segment === '..')) {
-    throw new Error('Paths must stay inside the selected osu! folder.')
-  }
-  return segments
 }
 
 function isNotFound(error: unknown): boolean {

@@ -1,7 +1,7 @@
 import { HitType, type PathType } from 'osu-classes'
 import { BeatmapDecoder, SlidableObject, SpinnableObject } from 'osu-parsers'
 import type { BeatmapEntry } from './OsuDatabase.ts'
-import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import type { OsuFileSystem } from '../fs/types.ts'
 import { relativeControlPointsToAbsolute } from '../core/SliderCurves.ts'
 import { generateSliderTickPercentages } from '../core/SliderTicks.ts'
 

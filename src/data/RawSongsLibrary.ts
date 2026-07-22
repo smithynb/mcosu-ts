@@ -1,6 +1,6 @@
 import { parseOsuBeatmapMetadata } from './OsuBeatmapMetadata.ts'
 import type { BeatmapEntry } from './OsuDatabase.ts'
-import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import type { OsuFileSystem } from '../fs/types.ts'
 
 export interface RawScanProgress {
   readonly scannedFolders: number

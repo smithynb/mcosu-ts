@@ -6,12 +6,12 @@ import {
 } from './data/OsuDatabase'
 import { scanRawSongs } from './data/RawSongsLibrary'
 import {
-  isFileSystemAccessSupported,
+  isOsuFileSystemSupported,
   reconnectOsuFolder,
   selectOsuFolder,
   UNSUPPORTED_BROWSER_MESSAGE,
   type OsuFileSystem,
-} from './fs/osuFileSystem'
+} from './fs/runtimeFileSystem'
 import { PlayerPanel } from './ui/PlayerPanel'
 import { ConsoleOverlay } from './ui/ConsoleOverlay'
 import { OptionsOverlay } from './ui/OptionsOverlay'
@@ -37,7 +37,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="pulse" aria-hidden="true"></span>
         <span>mcosu</span><span class="wordmark-suffix">.ts</span>
       </div>
-      <div class="masthead-actions"><p class="phase">export parity / phase 05d</p><button id="options-button" type="button">Options <kbd>O</kbd></button></div>
+      <div class="masthead-actions"><p class="phase">native shell / phase 06</p><button id="options-button" type="button">Options <kbd>O</kbd></button></div>
     </header>
 
     <section class="intro" aria-labelledby="page-title">
@@ -111,7 +111,7 @@ document.addEventListener('keydown', (event) => {
 void reconnectOnLoad()
 
 async function reconnectOnLoad(): Promise<void> {
-  if (!isFileSystemAccessSupported()) {
+  if (!isOsuFileSystemSupported()) {
     selectButton.disabled = true
     setStatus(UNSUPPORTED_BROWSER_MESSAGE, 'error')
     return
@@ -147,7 +147,7 @@ async function chooseFolder(): Promise<void> {
     setStatus(`Reading osu!.db from “${fileSystem.root.name}”…`)
     await loadLibrary(fileSystem)
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (isAbortError(error)) {
       setStatus('No folder selected. Your existing library has not changed.')
     } else {
       setStatus(messageForError(error), 'error')
@@ -155,6 +155,10 @@ async function chooseFolder(): Promise<void> {
   } finally {
     selectButton.disabled = false
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError'
 }
 
 async function loadLibrary(fileSystem: OsuFileSystem): Promise<void> {

@@ -1,5 +1,5 @@
 import type { BeatmapEntry } from '../data/OsuDatabase.ts'
-import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import type { OsuFileSystem } from '../fs/types.ts'
 import type { AudioClockSource } from './InterpolatedClock.ts'
 
 interface PitchCapableAudio extends HTMLAudioElement {

@@ -4,7 +4,7 @@ import { HitSoundPlayer } from '../audio/HitSoundPlayer.ts'
 import { parseGameplayBeatmap, readGameplayBeatmapText } from '../data/GameplayLoader.ts'
 import type { BeatmapEntry } from '../data/OsuDatabase.ts'
 import { encodeMcOsuScoresDatabase, type LocalScore } from '../data/ScoresDatabase.ts'
-import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import type { OsuFileSystem } from '../fs/types.ts'
 import { listSkinNames, loadSkin } from '../skin/Skin.ts'
 import { PlayfieldView } from './PlayfieldView.ts'
 import {

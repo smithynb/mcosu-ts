@@ -1,0 +1,23 @@
+[package]
+name = "mcosu-ts"
+version = "0.1.0"
+description = "A browser-first TypeScript port of McOsu"
+authors = ["mcosu-ts contributors"]
+license = "GPL-3.0-only"
+edition = "2021"
+rust-version = "1.85"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "mcosu_ts_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3" }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.11.5" }
+tauri-plugin-dialog = "2.7.2"

@@ -1,4 +1,4 @@
-import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
+import type { OsuFileSystem } from '../fs/types.ts'
 
 export const DEFAULT_COMBO_COLORS = ['#ffc000', '#00ca00', '#127cff', '#f21839'] as const
 const MAX_ANIMATION_FRAMES = 512
