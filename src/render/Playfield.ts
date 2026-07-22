@@ -7,7 +7,7 @@ import {
   type Point,
 } from '../core/GameRules.ts'
 import { createSliderCurve, type SliderCurve } from '../core/SliderCurves.ts'
-import type { GameplaySnapshot, JudgmentEvent } from '../core/GameplaySession.ts'
+import type { GameplaySnapshot, JudgmentEvent, SpinnerVisualState } from '../core/GameplaySession.ts'
 import type { HitResult } from '../core/Score.ts'
 import type { GameplayBeatmap, GameplayCircle, GameplaySlider } from '../data/GameplayLoader.ts'
 import { DEFAULT_COMBO_COLORS, type LoadedSkin, type SkinFrame } from '../skin/Skin.ts'
@@ -90,14 +90,17 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     const radius = rawCircleRadius(this.#beatmap.circleSize) * transform.scale
     this.#sliderBodyRenderer.beginFrame(width, height, window.devicePixelRatio || 1)
 
-    for (const object of this.#beatmap.objects) {
+    for (const [index, object] of this.#beatmap.objects.entries()) {
       if (object.time > positionMS + approachMS) break
       const endTime = object.kind === 'circle' ? object.time : object.endTime
       if (positionMS < object.time - approachMS || positionMS >= endTime) continue
       const alpha = this.#alpha(positionMS, object.time, approachMS)
       const color = this.#comboColor(object.comboColorIndex)
       if (object.kind === 'slider') this.#drawSliderBody(object, positionMS, approachMS, transform, radius, color, alpha)
-      if (object.kind === 'spinner') this.#drawSpinner(transform.center, radius, alpha)
+      if (object.kind === 'spinner') {
+        const spinnerState = gameplay?.snapshot.spinnerStates[index] ?? null
+        this.#drawSpinner(transform.center, transform.size.y, alpha, positionMS, spinnerState)
+      }
     }
     this.#sliderBodyRenderer.endFrame()
 
@@ -363,21 +366,107 @@ export class CanvasPlayfield implements PlayfieldRenderer {
     this.#context.fillText(text, center.x, center.y + radius * 0.03)
   }
 
-  #drawSpinner(center: Point, radius: number, alpha: number): void {
-    const spinnerRadius = radius * 3.35
-    this.#context.save()
-    this.#context.globalAlpha = alpha * 0.78
-    this.#context.strokeStyle = '#f1a0c4'
-    this.#context.lineWidth = Math.max(3, radius * 0.12)
-    this.#context.beginPath()
-    this.#context.arc(center.x, center.y, spinnerRadius, 0, Math.PI * 2)
-    this.#context.stroke()
-    this.#context.font = `600 ${Math.max(12, radius * 0.42)}px Inter, sans-serif`
-    this.#context.fillStyle = '#f3f1f7'
-    this.#context.textAlign = 'center'
-    this.#context.textBaseline = 'middle'
-    this.#context.fillText('SPIN', center.x, center.y)
-    this.#context.restore()
+  #drawSpinner(
+    center: Point,
+    playfieldHeight: number,
+    alpha: number,
+    positionMS: number,
+    state: SpinnerVisualState | null,
+  ): void {
+    const ratio = clamp(state?.ratio ?? 0, 0, 1)
+    const approachPercent = state?.approachPercent ?? 1
+    const rotation = state?.rotation ?? 0
+    // OsuSpinner.cpp:98-101: quadratic growth from 0.8 to 1.0 as clear nears.
+    const finishScale = 0.8 + (-ratio * (ratio - 2)) * 0.2
+    const diameter = playfieldHeight
+    const context = this.#context
+    context.save()
+    context.globalAlpha = alpha
+
+    // McOsu's old-style branch is selected by spinner-background presence;
+    // otherwise the bottom/middle/top stable layers are used (lines 103-212).
+    const background = this.#skin?.frame(this.#skin.spinnerBackground, positionMS)
+    const circle = this.#skin?.frame(this.#skin.spinnerCircle, positionMS)
+    const bottom = this.#skin?.frame(this.#skin.spinnerBottom, positionMS)
+    const middle = this.#skin?.frame(this.#skin.spinnerMiddle, positionMS)
+    const middle2 = this.#skin?.frame(this.#skin.spinnerMiddle2, positionMS)
+    const top = this.#skin?.frame(this.#skin.spinnerTop, positionMS)
+    const hasArtwork = background !== undefined || circle !== undefined || bottom !== undefined ||
+      middle !== undefined || middle2 !== undefined || top !== undefined
+
+    context.shadowColor = ratio >= 1 ? 'rgba(121,213,177,.9)' : 'rgba(233,103,161,.7)'
+    context.shadowBlur = 18 + ratio * 24
+    const oldStyle = background !== undefined || (this.#skin?.config.version ?? 2.5) < 2
+    if (oldStyle && (background !== undefined || circle !== undefined)) {
+      if (background !== undefined) drawFrame(context, background, center, diameter)
+      if (circle !== undefined) drawRotatedFrame(context, circle, center, diameter, rotation)
+    } else if (hasArtwork) {
+      if (bottom !== undefined) drawRotatedFrame(context, bottom, center, diameter * finishScale, rotation / 7)
+      if (top !== undefined) drawRotatedFrame(context, top, center, diameter * finishScale, rotation / 2)
+      if (middle2 !== undefined) drawRotatedFrame(context, middle2, center, diameter * finishScale, rotation)
+      if (middle !== undefined) {
+        context.globalAlpha = alpha * Math.max(0.2, approachPercent)
+        drawRotatedFrame(context, middle, center, diameter * finishScale, rotation / 2)
+        context.globalAlpha = alpha
+      }
+    } else {
+      const radius = diameter * 0.39 * finishScale
+      const gradient = context.createRadialGradient(center.x, center.y, radius * 0.1, center.x, center.y, radius)
+      gradient.addColorStop(0, `rgba(233,103,161,${0.12 + ratio * 0.12})`)
+      gradient.addColorStop(0.72, 'rgba(23,25,35,.82)')
+      gradient.addColorStop(1, ratio >= 1 ? '#79d5b1' : '#e967a1')
+      context.fillStyle = gradient
+      context.beginPath()
+      context.arc(center.x, center.y, radius, 0, Math.PI * 2)
+      context.fill()
+      context.strokeStyle = '#f3f1f7'
+      context.lineWidth = Math.max(2, diameter * 0.008)
+      context.beginPath()
+      context.arc(center.x, center.y, radius * 0.78, rotation, rotation + Math.PI * (0.45 + ratio * 1.55))
+      context.stroke()
+    }
+
+    // OsuSpinner.cpp:118-133,194-209: approach circle shrinks over the spinner.
+    if (!this.#hidden && approachPercent > 0) {
+      const approach = this.#skin?.frame(this.#skin.spinnerApproachCircle, positionMS)
+      const approachDiameter = diameter * approachPercent
+      context.globalAlpha = alpha * 0.9
+      if (approach !== undefined) drawFrame(context, approach, center, approachDiameter)
+      else {
+        context.strokeStyle = '#f1a0c4'
+        context.lineWidth = Math.max(2, diameter * 0.008)
+        context.beginPath()
+        context.arc(center.x, center.y, approachDiameter * 0.45, 0, Math.PI * 2)
+        context.stroke()
+      }
+    }
+
+    context.shadowBlur = 0
+    context.globalAlpha = alpha
+    const promptImage = state?.cleared
+      ? this.#skin?.frame(this.#skin.spinnerClear, positionMS)
+      : ratio < 0.03 ? this.#skin?.frame(this.#skin.spinnerSpin, positionMS) : undefined
+    const promptY = state?.cleared ? center.y - playfieldHeight * 0.25 : center.y + playfieldHeight * 0.3
+    if (promptImage !== undefined) drawFrame(context, promptImage, { x: center.x, y: promptY }, playfieldHeight * 0.22)
+    else if (state?.cleared || ratio < 0.03) {
+      context.fillStyle = state?.cleared ? '#79d5b1' : '#f3f1f7'
+      context.font = `900 ${Math.max(18, playfieldHeight * 0.055)}px Inter, sans-serif`
+      context.textAlign = 'center'
+      context.textBaseline = 'middle'
+      context.fillText(state?.cleared ? 'CLEAR!' : 'SPIN!', center.x, promptY)
+    }
+
+    context.fillStyle = '#f3f1f7'
+    context.font = `700 ${Math.max(13, playfieldHeight * 0.032)}px Inter, sans-serif`
+    context.textAlign = 'center'
+    context.fillText(`RPM: ${Math.round(state?.rpm ?? 0)}`, center.x, center.y + playfieldHeight * 0.43)
+    context.font = `800 ${Math.max(15, playfieldHeight * 0.038)}px Inter, sans-serif`
+    context.fillText(`${Math.round(ratio * 100)}%`, center.x, center.y)
+    if ((state?.bonusCount ?? 0) > 0) {
+      context.fillStyle = '#ffd166'
+      context.fillText(`BONUS ×${state!.bonusCount}`, center.x, center.y + playfieldHeight * 0.1)
+    }
+    context.restore()
   }
 
   #drawGameplayOverlay(
@@ -535,6 +624,20 @@ function drawFrame(
     targetWidth,
     targetHeight,
   )
+}
+
+function drawRotatedFrame(
+  context: CanvasRenderingContext2D,
+  frame: SkinFrame,
+  center: Point,
+  targetWidth: number,
+  rotation: number,
+): void {
+  context.save()
+  context.translate(center.x, center.y)
+  context.rotate(rotation)
+  drawFrame(context, frame, { x: 0, y: 0 }, targetWidth)
+  context.restore()
 }
 
 function sliderSnakePercent(positionMS: number, startTimeMS: number, approachMS: number): number {

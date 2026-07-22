@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "generate:hitsounds": "node scripts/generate-default-hitsounds.mjs",
     "preview": "vite preview",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:db": "npm test"

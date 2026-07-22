@@ -1,6 +1,7 @@
 import { calculateGrade, type Grade } from '../core/Grade.ts'
 import { OsuFile, OsuFileFormatError } from './OsuFile.ts'
 import type { ReplayFrame } from '../core/Replay.ts'
+import { OsuFileWriter } from './OsuFileWriter.ts'
 
 export type ScoresDatabaseFormat = 'stable' | 'mcosu'
 export type LocalScoreSource = ScoresDatabaseFormat | 'browser'
@@ -40,6 +41,59 @@ export interface ScoresDatabaseResult {
 }
 
 export const MAX_MCOSU_SCORES_VERSION = 20210110
+
+/** Port of McOsu's custom writer in `OsuDatabase.cpp:2420-2517`. */
+export function encodeMcOsuScoresDatabase(scores: readonly LocalScore[]): Uint8Array {
+  const browserScores = scores.filter((score) => score.source === 'browser')
+  const groups = new Map<string, LocalScore[]>()
+  for (const score of browserScores) {
+    const md5 = score.md5.trim().toLowerCase()
+    if (!/^[0-9a-f]{32}$/.test(md5)) throw new Error(`Cannot export score with invalid beatmap MD5: ${score.md5}`)
+    const group = groups.get(md5) ?? []
+    group.push(score)
+    groups.set(md5, group)
+  }
+
+  const db = new OsuFileWriter()
+  db.writeInt(MAX_MCOSU_SCORES_VERSION)
+  db.writeInt(groups.size)
+  for (const [md5, group] of groups) {
+    db.writeString(md5)
+    db.writeInt(group.length)
+    for (const score of group) writeMcOsuScore(db, score)
+  }
+  return db.toUint8Array()
+}
+
+function writeMcOsuScore(db: OsuFileWriter, score: LocalScore): void {
+  // Browser plays use the newest custom schema understood by the reader. The
+  // 0xA9 mode-byte hack is retained for field compatibility, though browser
+  // plays are never imported legacy scores.
+  const scoreVersion = MAX_MCOSU_SCORES_VERSION
+  db.writeByte(score.importedLegacy ? 0xa9 : 0)
+  db.writeInt(scoreVersion)
+  db.writeUnsignedLongLong(BigInt(Math.max(0, Math.floor(score.playedAt.getTime() / 1_000))))
+  db.writeString(score.playerName)
+  for (const count of [score.count300, score.count100, score.count50, score.countGeki, score.countKatu, score.countMiss]) {
+    db.writeShort(clampInteger(count, 0, 32_767))
+  }
+  db.writeUnsignedLongLong(clampBigInt(score.score, 0n, 0xffff_ffff_ffff_ffffn))
+  db.writeShort(clampInteger(score.maxCombo, 0, 32_767))
+  db.writeInt(score.modsLegacy)
+  db.writeShort(clampInteger(score.sliderBreaks ?? 0, 0, 32_767))
+  db.writeFloat(score.pp ?? 0)
+  // unavailable: UR, hit-error min/max, total/aim/speed stars
+  for (let index = 0; index < 6; index += 1) db.writeFloat(0)
+  db.writeFloat(Number.isFinite(score.speedMultiplier) ? score.speedMultiplier : 1)
+  // unavailable in the persisted browser score: CS, AR, OD, HP
+  for (let index = 0; index < 4; index += 1) db.writeFloat(0)
+  const judgedObjects = score.count300 + score.count100 + score.count50 + score.countMiss
+  const maxPossibleCombo = score.perfect ? Math.max(1, score.maxCombo) : Math.max(score.maxCombo + 1, 1)
+  db.writeInt(maxPossibleCombo)
+  db.writeInt(Math.max(0, judgedObjects))
+  db.writeInt(Math.max(0, score.count300 + score.count100 + score.count50 + score.countMiss))
+  db.writeString('') // experimental mod ConVars
+}
 
 const MAX_BEATMAPS = 2_000_000
 const MAX_SCORES_PER_BEATMAP = 1_000_000
@@ -280,4 +334,12 @@ function assertConsumed(db: OsuFile, label: string): void {
 function remove(values: string[], value: string): void {
   const index = values.indexOf(value)
   if (index >= 0) values.splice(index, 1)
+}
+
+function clampInteger(value: number, minimum: number, maximum: number): number {
+  return Math.trunc(Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? value : minimum)))
+}
+
+function clampBigInt(value: bigint, minimum: bigint, maximum: bigint): bigint {
+  return value < minimum ? minimum : value > maximum ? maximum : value
 }

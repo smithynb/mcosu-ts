@@ -92,6 +92,14 @@ test('spinner accumulates wrapped cursor angle and clears from required rotation
   const snapshot = session.update(3_000, { position: { x: center.x + 100, y: center.y }, held: false, clicks: [] })
   assert.equal(snapshot.objectResults[0], '300')
   assert.ok(snapshot.score.score >= 500)
+  const visual = snapshot.spinnerStates[0]
+  assert.ok(visual !== null)
+  assert.equal(visual.cleared, true)
+  assert.ok(visual.ratio >= 1)
+  assert.ok(visual.rotation > 0)
+  assert.ok(visual.rpm > 0 && visual.rpm <= 477)
+  assert.equal(visual.approachPercent, 0)
+  assert.equal(visual.bonusCount, Math.max(0, Math.floor(visual.rotations) - Math.trunc(visual.requiredRotations) - 1))
 })
 
 function makeBeatmap(objects: readonly GameplayObject[]): GameplayBeatmap {

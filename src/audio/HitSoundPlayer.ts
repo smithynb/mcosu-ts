@@ -113,11 +113,23 @@ export class HitSoundPlayer {
         // Probe the next codec or the normal-set fallback.
       }
     }
+    try {
+      const response = await fetch(defaultHitSoundPath(sample.hitSound))
+      if (!response.ok) return
+      const buffer = await this.#context.decodeAudioData((await response.arrayBuffer()).slice(0))
+      this.#samples.set(key, { buffer, volume: sample.volume })
+    } catch {
+      // Generated defaults are best-effort; unsupported audio remains silent.
+    }
   }
 
   #findSample(sample: GameplaySample): LoadedSample | undefined {
     return this.#samples.get(sampleKey(sample))
   }
+}
+
+export function defaultHitSoundPath(hitSound: string): string {
+  return `/default-hitsounds/normal-hit${normalizedSound(hitSound)}.wav`
 }
 
 function sampleKey(sample: GameplaySample): string {

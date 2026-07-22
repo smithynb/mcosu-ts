@@ -37,7 +37,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="pulse" aria-hidden="true"></span>
         <span>mcosu</span><span class="wordmark-suffix">.ts</span>
       </div>
-      <div class="masthead-actions"><p class="phase">options parity / phase 05b+</p><button id="options-button" type="button">Options <kbd>O</kbd></button></div>
+      <div class="masthead-actions"><p class="phase">export parity / phase 05d</p><button id="options-button" type="button">Options <kbd>O</kbd></button></div>
     </header>
 
     <section class="intro" aria-labelledby="page-title">

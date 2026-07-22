@@ -62,6 +62,20 @@ export interface GameplaySnapshot {
   readonly pauseCount: number
   readonly hitErrorMean: number
   readonly unstableRate: number
+  readonly spinnerStates: readonly (SpinnerVisualState | null)[]
+}
+
+export interface SpinnerVisualState {
+  /** Signed radians used by the layered spinner artwork. */
+  readonly rotation: number
+  readonly rotations: number
+  readonly requiredRotations: number
+  readonly ratio: number
+  /** Shrinks from 1 at spinner start to 0 at spinner end. */
+  readonly approachPercent: number
+  readonly rpm: number
+  readonly cleared: boolean
+  readonly bonusCount: number
 }
 
 interface CircleState {
@@ -99,6 +113,10 @@ interface SpinnerState {
   readonly storedDeltaAngles: number[]
   deltaAngleIndex: number
   sumDeltaAngle: number
+  drawRotation: number
+  approachPercent: number
+  rpm: number
+  lastUpdateMS: number
 }
 
 type ObjectState = CircleState | SliderState | SpinnerState
@@ -195,6 +213,27 @@ export class GameplaySession {
       pauseCount: this.#pauseCount,
       hitErrorMean: mean,
       unstableRate: Math.sqrt(variance) * 10,
+      spinnerStates: this.#states.map((state, index): SpinnerVisualState | null => {
+        if (state.kind !== 'spinner') return null
+        const object = this.#beatmap.objects[index]!
+        if (object.kind !== 'spinner') return null
+        const requiredRotations = spinnerRequiredRotations(
+          this.#beatmap.overallDifficulty,
+          object.endTime - object.time,
+          this.#speedMultiplier,
+        )
+        const ratio = requiredRotations <= 0 ? 1 : state.rotations / requiredRotations
+        return {
+          rotation: state.drawRotation,
+          rotations: state.rotations,
+          requiredRotations,
+          ratio,
+          approachPercent: state.approachPercent,
+          rpm: state.rpm,
+          cleared: ratio >= 1,
+          bonusCount: Math.max(0, state.wholeRotations - Math.trunc(requiredRotations) - 1),
+        }
+      }),
     }
   }
 
@@ -221,6 +260,10 @@ export class GameplaySession {
         storedDeltaAngles: Array.from({ length: sampleCount }, () => 0),
         deltaAngleIndex: 0,
         sumDeltaAngle: 0,
+        drawRotation: 0,
+        approachPercent: 1,
+        rpm: 0,
+        lastUpdateMS: Number.NaN,
       }
     }
     const curve = createSliderCurve(object.curveType, object.absoluteControlPoints, object.pixelLength)
@@ -372,6 +415,10 @@ export class GameplaySession {
     input: GameplayFrameInput,
   ): void {
     if (state.result !== null) return
+    const duration = Math.max(1, spinner.endTime - spinner.time)
+    // OsuSpinner.cpp:316-318: the approach layer is full-size at the start
+    // and shrinks to zero over the active spinner duration.
+    state.approachPercent = clamp((spinner.endTime - positionMS) / duration, 0, 1)
     const angle = Math.atan2(input.position.y - spinner.position.y, input.position.x - spinner.position.x)
     let delta = angle - state.lastAngle
     if (Math.abs(delta) > 0.001) state.lastAngle = angle
@@ -388,6 +435,15 @@ export class GameplaySession {
       // OsuSpinner.cpp:385-407: rotations use the moving-window average,
       // not the raw per-frame cursor angle.
       const rotationAngle = state.sumDeltaAngle / state.storedDeltaAngles.length
+      const deltaTimeMS = Number.isFinite(state.lastUpdateMS)
+        ? Math.max(1, positionMS - state.lastUpdateMS)
+        : 16
+      state.lastUpdateMS = positionMS
+      state.drawRotation += rotationAngle
+      const rotationPerSecond = rotationAngle * (1_000 / deltaTimeMS) / (Math.PI * 2)
+      // OsuSpinner.cpp:391-397: exponential RPM smoothing and stable's 477 cap.
+      const decay = Math.pow(0.01, deltaTimeMS / 1_000)
+      state.rpm = Math.min(477, state.rpm * decay + (1 - decay) * Math.abs(rotationPerSecond) * 60)
       const previousWhole = Math.floor(state.rotations)
       state.rotations += Math.abs(rotationAngle) / (Math.PI * 2)
       const newWhole = Math.floor(state.rotations)

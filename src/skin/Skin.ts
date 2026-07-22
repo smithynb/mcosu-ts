@@ -4,6 +4,7 @@ export const DEFAULT_COMBO_COLORS = ['#ffc000', '#00ca00', '#127cff', '#f21839']
 const MAX_ANIMATION_FRAMES = 512
 
 export interface SkinConfig {
+  readonly version: number
   readonly comboColors: readonly string[]
   readonly animationFramerate: number
   readonly sliderBorderColor: string
@@ -42,6 +43,15 @@ export interface LoadedSkin {
   readonly sliderBall?: SkinImage
   readonly sliderFollowCircle?: SkinImage
   readonly sliderScorePoint?: SkinImage
+  readonly spinnerBackground?: SkinImage
+  readonly spinnerCircle?: SkinImage
+  readonly spinnerApproachCircle?: SkinImage
+  readonly spinnerBottom?: SkinImage
+  readonly spinnerMiddle?: SkinImage
+  readonly spinnerMiddle2?: SkinImage
+  readonly spinnerTop?: SkinImage
+  readonly spinnerSpin?: SkinImage
+  readonly spinnerClear?: SkinImage
   frame(image: SkinImage | undefined, timeMS: number): SkinFrame | undefined
   dispose(): void
 }
@@ -50,6 +60,7 @@ export function parseSkinIni(text: string): SkinConfig {
   const comboColors: Array<{ index: number; color: string }> = []
   let section = ''
   let animationFramerate = 0
+  let version = 1
   let sliderBorderColor = '#ffffff'
   let sliderTrackOverride: string | undefined
 
@@ -63,6 +74,12 @@ export function parseSkinIni(text: string): SkinConfig {
     }
 
     if (section === 'general') {
+      const versionMatch = /^Version\s*:\s*(.+)$/i.exec(line)
+      if (versionMatch !== null) {
+        const raw = versionMatch[1]!.trim()
+        const parsed = Number(raw)
+        version = /latest|user/i.test(raw) ? 2.5 : Number.isFinite(parsed) ? parsed : 1
+      }
       const frameRateMatch = /^AnimationFramerate\s*:\s*(-?[\d.]+)/i.exec(line)
       if (frameRateMatch !== null) {
         const parsed = Number(frameRateMatch[1])
@@ -88,6 +105,7 @@ export function parseSkinIni(text: string): SkinConfig {
 
   comboColors.sort((left, right) => left.index - right.index)
   return {
+    version,
     comboColors: comboColors.length > 0 ? comboColors.map(({ color }) => color) : DEFAULT_COMBO_COLORS,
     animationFramerate,
     sliderBorderColor,
@@ -117,6 +135,7 @@ export async function loadSkin(
   )
   const objectUrls: string[] = []
   let config: SkinConfig = {
+    version: 1,
     comboColors: DEFAULT_COMBO_COLORS,
     animationFramerate: 0,
     sliderBorderColor: '#ffffff',
@@ -148,6 +167,15 @@ export async function loadSkin(
     hit100,
     hit50,
     hit0,
+    spinnerBackground,
+    spinnerCircle,
+    spinnerApproachCircle,
+    spinnerBottom,
+    spinnerMiddle,
+    spinnerMiddle2,
+    spinnerTop,
+    spinnerSpin,
+    spinnerClear,
     ...numbers
   ] = await Promise.all([
     loadImage('hitcircle'),
@@ -166,6 +194,16 @@ export async function loadSkin(
     loadImage('hit100'),
     loadImage('hit50'),
     loadImage('hit0'),
+    // OsuSkin.cpp:726-734 exact spinner subset names.
+    loadImage('spinner-background'),
+    loadImage('spinner-circle'),
+    loadImage('spinner-approachcircle'),
+    loadImage('spinner-bottom'),
+    loadImage('spinner-middle'),
+    loadImage('spinner-middle2'),
+    loadImage('spinner-top'),
+    loadImage('spinner-spin'),
+    loadImage('spinner-clear'),
     ...Array.from({ length: 10 }, (_, digit) => loadImage(`default-${digit}`)),
     ...Array.from({ length: 10 }, (_, digit) => loadImage(`score-${digit}`)),
   ])
@@ -192,6 +230,15 @@ export async function loadSkin(
     hit100,
     hit50,
     hit0,
+    spinnerBackground,
+    spinnerCircle,
+    spinnerApproachCircle,
+    spinnerBottom,
+    spinnerMiddle,
+    spinnerMiddle2,
+    spinnerTop,
+    spinnerSpin,
+    spinnerClear,
     numbers: defaultNumbers,
     scoreNumbers,
     frame(image, timeMS) {

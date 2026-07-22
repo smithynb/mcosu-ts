@@ -3,7 +3,7 @@ import { MusicPlayer } from '../audio/MusicPlayer.ts'
 import { HitSoundPlayer } from '../audio/HitSoundPlayer.ts'
 import { parseGameplayBeatmap, readGameplayBeatmapText } from '../data/GameplayLoader.ts'
 import type { BeatmapEntry } from '../data/OsuDatabase.ts'
-import type { LocalScore } from '../data/ScoresDatabase.ts'
+import { encodeMcOsuScoresDatabase, type LocalScore } from '../data/ScoresDatabase.ts'
 import type { OsuFileSystem } from '../fs/osuFileSystem.ts'
 import { listSkinNames, loadSkin } from '../skin/Skin.ts'
 import { PlayfieldView } from './PlayfieldView.ts'
@@ -22,6 +22,7 @@ import { LocalPlayStore } from '../data/LocalPlayStore.ts'
 import type { RankingResult } from './PlayfieldView.ts'
 import { parseReplay, type ImportedReplay } from '../core/Replay.ts'
 import { osuSkin } from '../core/ConVars.ts'
+import { encodeReplay, replayFilename } from '../data/ReplayExport.ts'
 
 interface JitterSample {
   readonly at: number
@@ -49,6 +50,7 @@ export class PlayerPanel {
   readonly #replayInput: HTMLInputElement
   readonly #localScores: HTMLOListElement
   readonly #localScoresStatus: HTMLParagraphElement
+  readonly #scoresDatabaseExport: HTMLButtonElement
   readonly #rawReadout: HTMLOutputElement
   readonly #interpolatedReadout: HTMLOutputElement
   readonly #stateReadout: HTMLOutputElement
@@ -147,7 +149,7 @@ export class PlayerPanel {
       </label>
 
       <section class="local-scores" aria-labelledby="local-scores-title">
-        <div><h3 id="local-scores-title">Top local scores</h3><p id="local-scores-status">Local scores are loading…</p></div>
+        <div><h3 id="local-scores-title">Top local scores</h3><p id="local-scores-status">Local scores are loading…</p><button id="export-scores-db" type="button" disabled>Download scores.db</button></div>
         <ol id="local-scores-list"></ol>
       </section>
 
@@ -189,6 +191,7 @@ export class PlayerPanel {
     this.#replayInput = element(root, 'replay-file')
     this.#localScores = element(root, 'local-scores-list')
     this.#localScoresStatus = element(root, 'local-scores-status')
+    this.#scoresDatabaseExport = element(root, 'export-scores-db')
     this.#rawReadout = element(root, 'raw-position')
     this.#interpolatedReadout = element(root, 'interpolated-position')
     this.#stateReadout = element(root, 'clock-state')
@@ -218,6 +221,7 @@ export class PlayerPanel {
       if (file !== undefined) void this.#importReplay(file)
       this.#replayInput.value = ''
     })
+    this.#scoresDatabaseExport.addEventListener('click', () => this.#exportScoresDatabase())
     root.addEventListener('dragover', (event) => {
       if ([...(event.dataTransfer?.items ?? [])].some((item) => item.kind === 'file')) event.preventDefault()
     })
@@ -513,6 +517,7 @@ export class PlayerPanel {
   #renderLocalScores(): void {
     const beatmap = this.#beatmap
     this.#localScores.replaceChildren()
+    this.#scoresDatabaseExport.disabled = this.#localPlayStore.scores().length === 0
     if (beatmap === null) {
       this.#localScoresStatus.textContent = this.#scoreStatus
       return
@@ -544,6 +549,8 @@ export class PlayerPanel {
       date.textContent = score.playedAt.toLocaleDateString()
       item.append(heading, detail, date)
       if (score.replayFrames !== undefined && score.replayFrames.length > 0) {
+        const actions = document.createElement('div')
+        actions.className = 'score-actions'
         const watch = document.createElement('button')
         watch.type = 'button'
         watch.className = 'score-replay-button'
@@ -552,9 +559,35 @@ export class PlayerPanel {
           modsLegacy: score.modsLegacy,
           frames: score.replayFrames!,
         }))
-        item.append(watch)
+        const exportReplay = document.createElement('button')
+        exportReplay.type = 'button'
+        exportReplay.className = 'score-replay-button'
+        exportReplay.textContent = 'Export .osr'
+        exportReplay.addEventListener('click', () => void this.#exportReplay(score))
+        actions.append(watch, exportReplay)
+        item.append(actions)
       }
       this.#localScores.append(item)
+    }
+  }
+
+  async #exportReplay(score: LocalScore): Promise<void> {
+    try {
+      const bytes = await encodeReplay(score)
+      downloadBytes(bytes, replayFilename(score), 'application/octet-stream')
+      this.#setStatus('Replay exported as a real .osr file.')
+    } catch (error) {
+      this.#setStatus(error instanceof Error ? error.message : 'Could not export replay.', true)
+    }
+  }
+
+  #exportScoresDatabase(): void {
+    try {
+      const bytes = encodeMcOsuScoresDatabase(this.#localPlayStore.scores())
+      downloadBytes(bytes, 'scores.db', 'application/octet-stream')
+      this.#setStatus('Browser plays exported in McOsu custom scores.db format.')
+    } catch (error) {
+      this.#setStatus(error instanceof Error ? error.message : 'Could not export scores.db.', true)
     }
   }
 
@@ -677,4 +710,14 @@ function formatTime(milliseconds: number): string {
 
 function formatScore(score: bigint): string {
   return new Intl.NumberFormat().format(score)
+}
+
+function downloadBytes(bytes: Uint8Array, filename: string, type: string): void {
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const url = URL.createObjectURL(new Blob([buffer], { type }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }

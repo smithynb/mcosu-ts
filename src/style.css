@@ -481,6 +481,8 @@ code {
 .local-scores li span { color: var(--muted); font-size: .78rem; }
 .local-scores time { color: var(--quiet); font-size: .72rem; }
 .score-replay-button { justify-self: end; white-space: nowrap; }
+.score-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+#export-scores-db { margin-top: .65rem; }
 
 @media (max-width: 720px) {
   .local-scores { grid-template-columns: 1fr; }

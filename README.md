@@ -62,6 +62,12 @@ The gameplay clock ports McOsu's non-SDL interpolation path from `OsuBeatmap.cpp
 
 `preservesPitch` and its WebKit/Mozilla-prefixed variants are set together. At `1.5x`, preserved pitch behaves like DoubleTime; disabled pitch preservation behaves approximately like Nightcore. Unlike McOsu's sound backend, browser `currentTime` already reports media timeline time at `playbackRate`, so the backend-specific slow-speed pitch compensation of up to five milliseconds is not applied.
 
+## Local score and replay exports
+
+Completed browser plays keep osu!-compatible replay frames in localStorage. A score row can download those frames as a real `.osr` file encoded by `osu-parsers` (including its LZMA frame block), or watch them through the same judgment engine. The player panel can also download all browser-owned plays as McOsu's custom `scores.db` version `20210110`; imported stable/McOsu rows are intentionally not copied into that export.
+
+When a beatmap and selected skin provide no usable hitsound, gameplay falls back to four tiny original PCM WAV samples in `public/default-hitsounds`. They are deterministic synthesis from `scripts/generate-default-hitsounds.mjs`, not copied game or skin assets; provenance and reuse terms are documented beside the generated files.
+
 ## Provenance and license
 
 The binary reader and database layout are TypeScript ports derived from [McOsu](https://github.com/McKay42/McOsu), with source regions cited in the implementation. McOsu is licensed under GPL-3.0.
