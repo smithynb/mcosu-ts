@@ -24,6 +24,8 @@ const KEY_M2 = ReplayButtonState.Right1
 const KEY_K1 = ReplayButtonState.Left2
 const KEY_K2 = ReplayButtonState.Right2
 const GAMEPLAY_KEYS = KEY_M1 | KEY_M2 | KEY_K1 | KEY_K2
+const LEFT_SIDE = KEY_M1 | KEY_K1
+const RIGHT_SIDE = KEY_M2 | KEY_K2
 
 /**
  * Decodes stable `.osr` through osu-parsers' lazer-lineage ScoreDecoder.
@@ -79,17 +81,21 @@ export class ReplayPlayer {
     const clicks: GameplayClick[] = []
     while (this.#index < this.#frames.length && this.#frames[this.#index]!.time <= positionMS) {
       const frame = this.#frames[this.#index++]!
-      const pressed = frame.keys & ~this.#keys
+      const previousKeys = this.#keys
       this.#keys = frame.keys
       this.#position = { x: frame.x, y: frame.y }
-      for (const [bit, input] of keyInputs()) {
-        if ((pressed & bit) !== 0) clicks.push({ musicTime: frame.time, position: this.#position, input })
+      for (const side of logicalSides()) {
+        if ((previousKeys & side.mask) === 0 && (this.#keys & side.mask) !== 0) {
+          clicks.push({ musicTime: frame.time, position: this.#position, input: side.input(this.#keys) })
+        }
       }
     }
     return {
       position: this.#position,
-      held: (this.#keys & GAMEPLAY_KEYS) !== 0,
-      heldInputs: keyInputs().filter(([bit]) => (this.#keys & bit) !== 0).map(([, input]) => input),
+      held: logicalSides().some((side) => (this.#keys & side.mask) !== 0),
+      heldInputs: logicalSides()
+        .filter((side) => (this.#keys & side.mask) !== 0)
+        .map((side) => side.input(this.#keys)),
       clicks,
     }
   }
@@ -132,6 +138,16 @@ export class ReplayRecorder {
 
 function keyInputs(): readonly (readonly [number, string])[] {
   return [[KEY_M1, 'MouseLeft'], [KEY_M2, 'MouseRight'], [KEY_K1, 'KeyZ'], [KEY_K2, 'KeyX']]
+}
+
+function logicalSides(): readonly {
+  readonly mask: number
+  readonly input: (keys: number) => string
+}[] {
+  return [
+    { mask: LEFT_SIDE, input: (keys) => (keys & KEY_K1) !== 0 ? 'KeyZ' : 'MouseLeft' },
+    { mask: RIGHT_SIDE, input: (keys) => (keys & KEY_K2) !== 0 ? 'KeyX' : 'MouseRight' },
+  ]
 }
 
 function keysFromInputs(inputs: readonly string[]): number {

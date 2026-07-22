@@ -26,6 +26,31 @@ test('replay player accumulates deltas and emits clicks only on rising edges', (
   assert.deepEqual(player.inputAt(150).position, { x: 13, y: 23 })
 })
 
+test('stable M1+K1 duplicate bits collapse to one keyboard-preferred click', () => {
+  const player = new ReplayPlayer([
+    { delta: 100, x: 100, y: 200, keys: 5 },
+    { delta: 10, x: 101, y: 201, keys: 5 },
+  ])
+  const pressed = player.inputAt(100)
+  assert.deepEqual(pressed.clicks.map((click) => click.input), ['KeyZ'])
+  assert.deepEqual(pressed.heldInputs, ['KeyZ'])
+  assert.equal(pressed.held, true)
+  assert.equal(player.inputAt(110).clicks.length, 0)
+})
+
+test('alternating stable duplicate pairs emit one logical click per side', () => {
+  const player = new ReplayPlayer([
+    { delta: 100, x: 100, y: 200, keys: 5 },
+    { delta: 10, x: 101, y: 201, keys: 10 },
+    { delta: 10, x: 102, y: 202, keys: 0 },
+    { delta: 10, x: 103, y: 203, keys: 5 },
+  ])
+  assert.deepEqual(player.inputAt(100).clicks.map((click) => click.input), ['KeyZ'])
+  assert.deepEqual(player.inputAt(110).clicks.map((click) => click.input), ['KeyX'])
+  assert.equal(player.inputAt(120).held, false)
+  assert.deepEqual(player.inputAt(130).clicks.map((click) => click.input), ['KeyZ'])
+})
+
 test('recorder preserves click taps, releases, cursor state, and compatible deltas', () => {
   const recorder = new ReplayRecorder()
   recorder.record(100, {

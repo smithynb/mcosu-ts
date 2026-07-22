@@ -21,9 +21,13 @@ test('merges same-name collections and de-duplicates hashes', () => {
   assert.equal(indexCollectionHashes(merged).get('Same')?.has(hash('c')), true)
 })
 
-test('rejects unsupported custom versions, malformed counts/hashes, truncation, and trailing drift', () => {
+test('skips malformed hashes while retaining the collection', () => {
+  const parsed = parseCollectionsDatabase(database(20220110, [['Mixed', [hash('a'), 'nope', hash('b')]]]), 'mcosu')
+  assert.deepEqual(parsed.collections, [{ name: 'Mixed', hashes: [hash('a'), hash('b')], sources: ['mcosu'] }])
+})
+
+test('rejects unsupported custom versions, malformed counts, truncation, and trailing drift', () => {
   assert.throws(() => parseCollectionsDatabase(database(20220111, []), 'mcosu'), /newer than supported/)
-  assert.throws(() => parseCollectionsDatabase(database(20220110, [['Bad', ['nope']]]), 'mcosu'), /Invalid MD5/)
   const negative = new BinaryWriter().int(20220110).int(-1).buffer()
   assert.throws(() => parseCollectionsDatabase(negative, 'mcosu'), /Invalid collection count/)
   const valid = new Uint8Array(database(20220110, [['A', [hash('a')]]]))

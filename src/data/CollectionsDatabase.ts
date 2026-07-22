@@ -40,10 +40,10 @@ export function parseCollectionsDatabase(buffer: ArrayBuffer, source: Collection
     if (totalEntries > MAX_ENTRIES) throw new OsuFileFormatError(`Total collection entries exceed ${MAX_ENTRIES}`, db.offset)
     const hashes: string[] = []
     for (let entry = 0; entry < entryCount; entry += 1) {
-      const offset = db.offset
       const hash = db.readString().trim().toLowerCase()
-      if (!/^[0-9a-f]{32}$/.test(hash)) throw new OsuFileFormatError(`Invalid MD5 in collection ${index + 1}`, offset)
-      hashes.push(hash)
+      // OsuDatabase.cpp:2644-2650 ignores non-MD5 entries while preserving
+      // the rest of the collection. The string is still consumed structurally.
+      if (/^[0-9a-f]{32}$/.test(hash)) hashes.push(hash)
     }
     collections.push({ name, hashes, sources: [source] })
   }
