@@ -25,18 +25,37 @@ The build and Node-only rules/database tests are deterministic and require no ne
 
 ### Tauri desktop shell
 
-The optional Tauri v2 shell requires Rust plus the platform packages listed by Tauri. It leaves the browser commands above unchanged:
+The optional Tauri v2 shell requires a current Rust toolchain and Tauri's platform packages. On Debian/Ubuntu, install the official prerequisite set:
+
+```sh
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Then use the native development or release command. These do not change the browser-first commands above:
 
 ```sh
 npm run tauri:dev
 npm run tauri:build
-cd src-tauri
-cargo check
 ```
 
-The desktop adapter opens a native directory picker, canonicalizes the selected osu! root in Rust, and persists that path under the application's platform config directory. Every native read, listing, and existence query resolves relative to that root; traversal and symlink escapes are rejected before access. Browser selections continue to use IndexedDB instead.
+Release artifacts are written below `src-tauri/target/release/bundle/`; the unbundled executable is `src-tauri/target/release/mcosu-ts`. Linux AppImages include Tauri's media-framework support because this application plays local audio.
 
-Automated/headless verification compiles the shell with `cargo check` and tests the root-confinement logic without launching a GUI. Platform bundles can be produced later on an interactive packaging host with `npm run tauri:build`.
+If AppImage tooling cannot run in a restricted/headless filesystem, use the release executable as the compile gate:
+
+```sh
+cargo build --release --manifest-path src-tauri/Cargo.toml
+```
+
+To produce installable packages on a normal local Linux host, run `npm run tauri:build` from the repository root. It builds the release executable and the configured `.deb`, `.rpm`, and `.AppImage` artifacts; no GUI is launched by the build command.
+
+The desktop adapter opens a native directory picker, canonicalizes the selected osu! root in Rust, and persists it as `selected-osu-root.txt` in Tauri's app config directory. On Linux that is `$XDG_CONFIG_HOME/dev.mcosu.ts/` (normally `~/.config/dev.mcosu.ts/`). Browser selections continue to use IndexedDB instead.
+
+Native filesystem access is not exposed through a broad plugin scope. The frontend can call only the dedicated `get_root`, `set_root`, `read_file`, `list_dir`, and `path_exists` commands. Rust rejects absolute and parent-relative paths, canonicalizes every existing target, and verifies it remains below the canonical selected root; this also blocks symlink escapes. The production WebView CSP allows only bundled resources, Tauri IPC, and the `blob:`/`data:` image and media URLs created for local music, skins, and exports—no remote origins or inline script/style permission. A separate development CSP permits only Vite's localhost HMR WebSocket and injected development styles.
+
+Automated/headless verification uses `cargo check` and Rust unit tests for root confinement without launching a GUI. `npm run tauri:build` performs the Vite build, release compilation, and platform bundling; it does not launch the application.
 
 ### ConVars
 
