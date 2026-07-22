@@ -18,8 +18,14 @@ import { convars } from './core/ConVars'
 import { NO_MODS } from './core/Mods'
 import { calculateStarRating } from './core/StandardPerformance'
 import { StarRatingCache } from './core/StarRatingCache'
-import { indexScoresByMd5, parseScoresDatabase } from './data/ScoresDatabase'
+import { indexScoresByMd5, parseScoresDatabase, type LocalScore } from './data/ScoresDatabase'
 import { readGameplayBeatmapText } from './data/GameplayLoader'
+import {
+  indexCollectionHashes,
+  mergeCollections,
+  parseCollectionsDatabase,
+  type BeatmapCollection,
+} from './data/CollectionsDatabase'
 
 const MAX_RENDERED_ROWS = 400
 
@@ -30,7 +36,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="pulse" aria-hidden="true"></span>
         <span>mcosu</span><span class="wordmark-suffix">.ts</span>
       </div>
-      <p class="phase">health, pause & ranking / phase 05a</p>
+      <p class="phase">replays & collections / phase 05b</p>
     </header>
 
     <section class="intro" aria-labelledby="page-title">
@@ -53,6 +59,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span>Filter beatmaps</span>
           <input id="search" type="search" placeholder="Artist, title, difficulty, creator…" autocomplete="off" />
         </label>
+        <label class="collection-field">
+          <span>Collection</span>
+          <select id="collection-filter" disabled><option value="">All beatmaps</option></select>
+        </label>
       </div>
       <div class="library-meta">
         <p id="count"></p>
@@ -70,16 +80,23 @@ const searchInput = requireElement<HTMLInputElement>('search')
 const countLine = requireElement<HTMLParagraphElement>('count')
 const renderNote = requireElement<HTMLParagraphElement>('render-note')
 const songList = requireElement<HTMLDivElement>('song-list')
-const playerPanel = new PlayerPanel(requireElement<HTMLElement>('player-panel'))
+const collectionSelect = requireElement<HTMLSelectElement>('collection-filter')
+let localScoreIndex: ReadonlyMap<string, readonly LocalScore[]> = new Map()
+const playerPanel = new PlayerPanel(requireElement<HTMLElement>('player-panel'), (index) => {
+  localScoreIndex = index
+  renderLibrary()
+})
 new ConsoleOverlay(convars)
 
 let beatmaps: BeatmapEntry[] | null = null
 let activeFileSystem: OsuFileSystem | null = null
 let starRatingCache: StarRatingCache | null = null
 let libraryGeneration = 0
+let collectionIndex: ReadonlyMap<string, ReadonlySet<string>> = new Map()
 
 selectButton.addEventListener('click', () => void chooseFolder())
 searchInput.addEventListener('input', renderLibrary)
+collectionSelect.addEventListener('change', renderLibrary)
 
 void reconnectOnLoad()
 
@@ -133,11 +150,16 @@ async function chooseFolder(): Promise<void> {
 async function loadLibrary(fileSystem: OsuFileSystem): Promise<void> {
   const generation = ++libraryGeneration
   activeFileSystem = fileSystem
+  localScoreIndex = new Map()
+  collectionIndex = new Map()
+  collectionSelect.replaceChildren(optionElement('', 'Loading collections…'))
+  collectionSelect.disabled = true
   starRatingCache = new StarRatingCache(async (entry) =>
     calculateStarRating(await readGameplayBeatmapText(fileSystem, entry), NO_MODS),
   )
   playerPanel.setLocalScores(null)
   void loadLocalScores(fileSystem, generation)
+  void loadCollections(fileSystem, generation)
   let databaseFailure: string | null = null
   if (await fileSystem.exists('osu!.db')) {
     try {
@@ -175,6 +197,30 @@ async function loadLibrary(fileSystem: OsuFileSystem): Promise<void> {
   }
 }
 
+async function loadCollections(fileSystem: OsuFileSystem, generation: number): Promise<void> {
+  const groups: BeatmapCollection[][] = []
+  const failures: string[] = []
+  for (const [path, source] of [['collection.db', 'stable'], ['collections.db', 'mcosu']] as const) {
+    try {
+      if (!(await fileSystem.exists(path))) continue
+      const file = await fileSystem.getFile(path)
+      groups.push([...parseCollectionsDatabase(await file.arrayBuffer(), source).collections])
+    } catch (error) {
+      failures.push(`${path}: ${messageForError(error)}`)
+    }
+  }
+  if (generation !== libraryGeneration) return
+  const collections = mergeCollections(groups)
+  collectionIndex = indexCollectionHashes(collections)
+  collectionSelect.replaceChildren(optionElement('', 'All beatmaps'))
+  for (const collection of collections) {
+    collectionSelect.append(optionElement(collection.name, `${collection.name} (${formatNumber(collection.hashes.length)})`))
+  }
+  collectionSelect.disabled = collections.length === 0
+  collectionSelect.title = failures.length === 0 ? '' : `Some collections could not be read: ${failures.join('; ')}`
+  renderLibrary()
+}
+
 async function loadLocalScores(fileSystem: OsuFileSystem, generation: number): Promise<void> {
   try {
     if (!(await fileSystem.exists('scores.db'))) {
@@ -198,6 +244,7 @@ async function loadLocalScores(fileSystem: OsuFileSystem, generation: number): P
 function publishLibrary(entries: BeatmapEntry[]): void {
   beatmaps = entries
   searchInput.value = ''
+  collectionSelect.value = ''
   library.hidden = false
   renderLibrary()
 }
@@ -205,12 +252,14 @@ function publishLibrary(entries: BeatmapEntry[]): void {
 function renderLibrary(): void {
   if (beatmaps === null) return
   const query = searchInput.value.trim().toLocaleLowerCase()
+  const hashes = collectionSelect.value.length === 0 ? null : collectionIndex.get(collectionSelect.value) ?? new Set<string>()
+  const inCollection = hashes === null ? beatmaps : beatmaps.filter((entry) => hashes.has(entry.md5.toLowerCase()))
   const matches = query.length === 0
-    ? beatmaps
-    : beatmaps.filter((entry) => searchableText(entry).includes(query))
+    ? inCollection
+    : inCollection.filter((entry) => searchableText(entry).includes(query))
   const visible = matches.slice(0, MAX_RENDERED_ROWS)
 
-  countLine.textContent = query.length === 0
+  countLine.textContent = query.length === 0 && hashes === null
     ? `${formatNumber(matches.length)} standard beatmaps`
     : `${formatNumber(matches.length)} of ${formatNumber(beatmaps.length)} standard beatmaps`
   renderNote.textContent = matches.length > MAX_RENDERED_ROWS
@@ -257,6 +306,14 @@ function createSongRow(entry: BeatmapEntry): HTMLElement {
   const copy = document.createElement('span')
   copy.className = 'song-copy'
   copy.append(title, creator)
+  const best = entry.md5.length === 0 ? undefined : localScoreIndex.get(entry.md5.toLowerCase())?.[0]
+  if (best !== undefined) {
+    const badge = document.createElement('span')
+    badge.className = 'local-best-grade'
+    badge.textContent = best.grade
+    badge.title = `Local best: ${formatScore(best.score)} · ${(best.accuracy * 100).toFixed(2)}%`
+    copy.append(badge)
+  }
   row.append(copy, stars)
   item.append(row)
   const cache = starRatingCache
@@ -298,4 +355,15 @@ function requireElement<T extends HTMLElement>(id: string): T {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value)
+}
+
+function formatScore(value: bigint): string {
+  return new Intl.NumberFormat().format(value)
+}
+
+function optionElement(value: string, label: string): HTMLOptionElement {
+  const option = document.createElement('option')
+  option.value = value
+  option.textContent = label
+  return option
 }

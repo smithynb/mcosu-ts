@@ -3,6 +3,7 @@ import type { GameplayMods } from '../core/Mods.ts'
 import { modsToLegacy } from '../core/Mods.ts'
 import type { ScoreSnapshot } from '../core/Score.ts'
 import { indexScoresByMd5, modsFromLegacy, type LocalScore } from './ScoresDatabase.ts'
+import type { ReplayFrame } from '../core/Replay.ts'
 
 export interface StorageLike {
   getItem(key: string): string | null
@@ -17,6 +18,7 @@ export interface CompletedPlay {
   readonly pp: number
   readonly mods: GameplayMods
   readonly playedAt: Date
+  readonly replayFrames?: readonly ReplayFrame[]
 }
 
 interface StoredPlay {
@@ -27,6 +29,7 @@ interface StoredPlay {
   readonly pp: number
   readonly modsLegacy: number
   readonly playedAt: string
+  readonly replayFrames?: readonly ReplayFrame[]
 }
 
 const STORAGE_KEY = 'mcosu-ts.local-plays.v1'
@@ -53,6 +56,7 @@ export class LocalPlayStore {
         pp: play.pp,
         modsLegacy: modsToLegacy(play.mods),
         playedAt: play.playedAt.toISOString(),
+        replayFrames: play.replayFrames?.map((frame) => ({ ...frame })),
       })
       this.#persist()
     }
@@ -85,6 +89,7 @@ export class LocalPlayStore {
         speedMultiplier: (play.modsLegacy & (64 | 512)) !== 0 ? 1.5 : (play.modsLegacy & 256) !== 0 ? 0.75 : 1,
         importedLegacy: false,
         sourceOrder,
+        replayFrames: validReplayFrames(play.replayFrames) ? play.replayFrames?.map((frame) => ({ ...frame })) : undefined,
       }]
     })
   }
@@ -96,6 +101,15 @@ export class LocalPlayStore {
   #persist(): void {
     try { this.#storage?.setItem(this.#key, JSON.stringify(this.#plays)) } catch { /* local scores remain in memory */ }
   }
+}
+
+function validReplayFrames(value: unknown): value is readonly ReplayFrame[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.length <= 2_000_000 && value.every((frame) => {
+    if (typeof frame !== 'object' || frame === null) return false
+    const item = frame as ReplayFrame
+    return Number.isFinite(item.delta) && item.delta >= 0 && Number.isFinite(item.x) && Number.isFinite(item.y) &&
+      Number.isSafeInteger(item.keys) && item.keys >= 0 && item.keys <= 15
+  }))
 }
 
 function read(storage: StorageLike | null, key: string): StoredPlay[] {

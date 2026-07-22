@@ -11,6 +11,7 @@ import {
   applyDifficultyMods,
   modPitchPreserved,
   modSpeed,
+  modsFromLegacy,
   musicPositionWithOffsets,
   NO_MODS,
   scoreMultiplier,
@@ -19,6 +20,7 @@ import {
 import { createStandardPerformance } from '../core/StandardPerformance.ts'
 import { LocalPlayStore } from '../data/LocalPlayStore.ts'
 import type { RankingResult } from './PlayfieldView.ts'
+import { parseReplay, type ImportedReplay } from '../core/Replay.ts'
 
 interface JitterSample {
   readonly at: number
@@ -43,6 +45,7 @@ export class PlayerPanel {
   readonly #gameplayButton: HTMLButtonElement
   readonly #modButtons: HTMLButtonElement[]
   readonly #modMultiplier: HTMLOutputElement
+  readonly #replayInput: HTMLInputElement
   readonly #localScores: HTMLOListElement
   readonly #localScoresStatus: HTMLParagraphElement
   readonly #rawReadout: HTMLOutputElement
@@ -68,9 +71,11 @@ export class PlayerPanel {
   readonly #localPlayStore = new LocalPlayStore()
   #baseScores: readonly LocalScore[] = []
   #playId = ''
+  readonly #onScoresChanged: (index: ReadonlyMap<string, readonly LocalScore[]>) => void
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, onScoresChanged: (index: ReadonlyMap<string, readonly LocalScore[]>) => void = () => {}) {
     this.#root = root
+    this.#onScoresChanged = onScoresChanged
     this.#playfieldView = new PlayfieldView({
       onSpeedChange: (speed) => this.#setSpeed(speed),
       onPauseChange: (paused) => void this.#setGameplayPaused(paused),
@@ -133,6 +138,12 @@ export class PlayerPanel {
         <small>score multiplier <output id="mod-multiplier">1.00×</output></small>
       </fieldset>
 
+      <label class="replay-import" for="replay-file">
+        <span>Watch an osu! replay</span>
+        <small>Drop an .osr here or choose a file; its MD5 must match this beatmap.</small>
+        <input id="replay-file" type="file" accept=".osr,application/octet-stream">
+      </label>
+
       <section class="local-scores" aria-labelledby="local-scores-title">
         <div><h3 id="local-scores-title">Top local scores</h3><p id="local-scores-status">Local scores are loading…</p></div>
         <ol id="local-scores-list"></ol>
@@ -173,6 +184,7 @@ export class PlayerPanel {
     this.#gameplayButton = element(root, 'play-beatmap')
     this.#modButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-mod]'))
     this.#modMultiplier = element(root, 'mod-multiplier')
+    this.#replayInput = element(root, 'replay-file')
     this.#localScores = element(root, 'local-scores-list')
     this.#localScoresStatus = element(root, 'local-scores-status')
     this.#rawReadout = element(root, 'raw-position')
@@ -195,6 +207,20 @@ export class PlayerPanel {
     for (const button of this.#modButtons) {
       button.addEventListener('click', () => this.#toggleMod(button.dataset.mod as GameplayMod))
     }
+    this.#replayInput.addEventListener('change', () => {
+      const file = this.#replayInput.files?.[0]
+      if (file !== undefined) void this.#importReplay(file)
+      this.#replayInput.value = ''
+    })
+    root.addEventListener('dragover', (event) => {
+      if ([...(event.dataTransfer?.items ?? [])].some((item) => item.kind === 'file')) event.preventDefault()
+    })
+    root.addEventListener('drop', (event) => {
+      const file = [...(event.dataTransfer?.files ?? [])].find((item) => item.name.toLowerCase().endsWith('.osr'))
+      if (file === undefined) return
+      event.preventDefault()
+      void this.#importReplay(file)
+    })
   }
 
   async open(beatmap: BeatmapEntry, fileSystem: OsuFileSystem): Promise<void> {
@@ -244,6 +270,7 @@ export class PlayerPanel {
     this.#scoreIndex = index === null ? null : this.#localPlayStore.mergedIndex(this.#baseScores)
     this.#scoreStatus = status
     this.#renderLocalScores()
+    if (this.#scoreIndex !== null) this.#onScoresChanged(this.#scoreIndex)
   }
 
   async #loadSkinChoices(fileSystem: OsuFileSystem, generation: number): Promise<void> {
@@ -253,7 +280,7 @@ export class PlayerPanel {
     for (const name of names) this.#skinSelect.append(option(name, name))
   }
 
-  async #openGameplay(mode: 'watch' | 'play'): Promise<void> {
+  async #openGameplay(mode: 'watch' | 'play' | 'replay', replay?: Pick<ImportedReplay, 'modsLegacy' | 'frames'>): Promise<void> {
     const beatmap = this.#beatmap
     const fileSystem = this.#fileSystem
     if (beatmap === null || fileSystem === null) return
@@ -263,10 +290,11 @@ export class PlayerPanel {
     this.#setStatus('Decoding gameplay objects…')
     try {
       const beatmapText = await readGameplayBeatmapText(fileSystem, beatmap)
-      const gameplay = applyDifficultyMods(parseGameplayBeatmap(beatmapText), this.#mods)
-      const performance = createStandardPerformance(beatmapText, this.#mods)
-      const speed = modSpeed(this.#mods)
-      this.#pitchToggle.checked = modPitchPreserved(this.#mods)
+      const activeMods = replay === undefined ? this.#mods : modsFromLegacy(replay.modsLegacy)
+      const gameplay = applyDifficultyMods(parseGameplayBeatmap(beatmapText), activeMods)
+      const performance = createStandardPerformance(beatmapText, activeMods)
+      const speed = modSpeed(activeMods)
+      this.#pitchToggle.checked = modPitchPreserved(activeMods)
       this.#player?.setPitchPreserved(this.#pitchToggle.checked)
       this.#setSpeed(speed)
       let skin = null
@@ -285,10 +313,10 @@ export class PlayerPanel {
         gameplay,
         skin,
         `${beatmap.artist} — ${beatmap.title} [${beatmap.difficultyName}]`,
-        { mode, hitSounds, performance },
+        { mode, hitSounds, performance, replayFrames: replay?.frames },
       )
       this.#playId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-      if (mode === 'play' && this.#player !== null && this.#beatmapClock !== null) {
+      if (mode !== 'watch' && this.#player !== null && this.#beatmapClock !== null) {
         this.#player.setPositionMS(0)
         this.#beatmapClock.startPlaying()
         await this.#player.play()
@@ -299,7 +327,9 @@ export class PlayerPanel {
           ? `Skin “${skinName}” was unusable; using procedural graphics.`
           : mode === 'play'
             ? 'Playfield live. Use Z/X or mouse buttons.'
-            : 'Autoplay ready. Playback controls continue to drive the watch clock.',
+            : mode === 'replay'
+              ? 'Replay playback started from recorded cursor and key frames.'
+              : 'Autoplay ready. Playback controls continue to drive the watch clock.',
       )
     } catch (error) {
       this.#playfieldView.close()
@@ -307,6 +337,28 @@ export class PlayerPanel {
     } finally {
       this.#watchButton.disabled = this.#player === null
       this.#gameplayButton.disabled = this.#player === null
+    }
+  }
+
+  async #importReplay(file: File): Promise<void> {
+    const beatmap = this.#beatmap
+    if (beatmap === null) {
+      this.#setStatus('Select a beatmap before importing a replay.', true)
+      return
+    }
+    if (!/^[0-9a-f]{32}$/i.test(beatmap.md5)) {
+      this.#setStatus('This raw-scanned beatmap has no MD5, so replay matching is unavailable.', true)
+      return
+    }
+    this.#setStatus(`Reading replay “${file.name}”…`)
+    try {
+      const replay = await parseReplay(await file.arrayBuffer())
+      if (replay.beatmapMd5 !== beatmap.md5.toLowerCase()) {
+        throw new Error('Replay beatmap MD5 does not match the selected beatmap.')
+      }
+      await this.#openGameplay('replay', replay)
+    } catch (error) {
+      this.#setStatus(error instanceof Error ? error.message : 'Could not read replay.', true)
     }
   }
 
@@ -479,6 +531,17 @@ export class PlayerPanel {
       date.dateTime = score.playedAt.toISOString()
       date.textContent = score.playedAt.toLocaleDateString()
       item.append(heading, detail, date)
+      if (score.replayFrames !== undefined && score.replayFrames.length > 0) {
+        const watch = document.createElement('button')
+        watch.type = 'button'
+        watch.className = 'score-replay-button'
+        watch.textContent = 'Watch replay'
+        watch.addEventListener('click', () => void this.#openGameplay('replay', {
+          modsLegacy: score.modsLegacy,
+          frames: score.replayFrames!,
+        }))
+        item.append(watch)
+      }
       this.#localScores.append(item)
     }
   }
@@ -546,9 +609,11 @@ export class PlayerPanel {
       pp: result.pp,
       mods: this.#mods,
       playedAt: new Date(),
+      replayFrames: result.replayFrames,
     })
     this.#scoreIndex = this.#localPlayStore.mergedIndex(this.#baseScores)
     this.#renderLocalScores()
+    this.#onScoresChanged(this.#scoreIndex)
   }
 
   #setStatus(message: string, error = false): void {

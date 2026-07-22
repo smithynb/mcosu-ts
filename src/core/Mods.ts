@@ -77,6 +77,19 @@ export function modsToLegacy(mods: GameplayMods): number {
   return result
 }
 
+export function modsFromLegacy(mods: number): GameplayMods {
+  return {
+    NF: (mods & 1) !== 0,
+    EZ: (mods & 2) !== 0,
+    HD: (mods & 8) !== 0,
+    HR: (mods & 16) !== 0,
+    DT: (mods & 64) !== 0 && (mods & 512) === 0,
+    NC: (mods & 512) !== 0,
+    HT: (mods & 256) !== 0,
+    Auto: false,
+  }
+}
+
 // OsuBeatmap.cpp:581-587: universal is added after scaling by speed; local is subtracted.
 export function musicPositionWithOffsets(
   musicPositionMS: number,

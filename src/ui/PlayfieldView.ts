@@ -10,6 +10,7 @@ import type { StandardPerformanceContext } from '../core/StandardPerformance.ts'
 import { FailAnimation } from '../core/Health.ts'
 import { osuFailTime } from '../core/ConVars.ts'
 import type { GameplaySnapshot } from '../core/GameplaySession.ts'
+import { ReplayPlayer, ReplayRecorder, type ReplayFrame } from '../core/Replay.ts'
 
 export interface RankingResult {
   readonly snapshot: GameplaySnapshot
@@ -17,6 +18,7 @@ export interface RankingResult {
   readonly pp: number
   readonly failed: boolean
   readonly interactive: boolean
+  readonly replayFrames?: readonly ReplayFrame[]
 }
 
 export interface PlayfieldCallbacks {
@@ -37,7 +39,7 @@ export class PlayfieldView {
   #input: GameplayInput | null = null
   #hitSounds: HitSoundPlayer | null = null
   #lastCursor = { x: 256, y: 192 }
-  #mode: 'watch' | 'play' = 'watch'
+  #mode: 'watch' | 'play' | 'replay' = 'watch'
   #beatmap: GameplayBeatmap | null = null
   #performance: StandardPerformanceContext | null = null
   #livePp = 0
@@ -48,6 +50,8 @@ export class PlayfieldView {
   #completed = false
   #failAnimation: FailAnimation | null = null
   #lastSpeed = 1
+  #replay: ReplayPlayer | null = null
+  #recorder: ReplayRecorder | null = null
 
   constructor(callbacks: PlayfieldCallbacks) {
     this.#callbacks = callbacks
@@ -115,16 +119,17 @@ export class PlayfieldView {
     skin: LoadedSkin | null,
     title: string,
     options: {
-      mode?: 'watch' | 'play'
+      mode?: 'watch' | 'play' | 'replay'
       hitSounds?: HitSoundPlayer | null
       performance?: StandardPerformanceContext | null
+      replayFrames?: readonly ReplayFrame[]
     } = {},
   ): void {
     this.close()
     this.#mode = options.mode ?? 'watch'
     required<HTMLHeadingElement>(this.#root, '#watch-title').textContent = title
     required<HTMLElement>(this.#root, '#playfield-mode').textContent =
-      this.#mode === 'play' ? 'interactive standard playfield' : 'autoplay standard playfield'
+      this.#mode === 'play' ? 'interactive standard playfield' : this.#mode === 'replay' ? 'replay standard playfield' : 'autoplay standard playfield'
     this.#root.hidden = false
     const sliderCanvas = required<HTMLCanvasElement>(this.#root, '.slider-body-layer')
     this.#renderer = new CanvasPlayfield(this.#canvas, sliderCanvas, beatmap, skin)
@@ -135,6 +140,8 @@ export class PlayfieldView {
     this.#paused = false
     this.#completed = false
     this.#failAnimation = null
+    this.#replay = options.replayFrames === undefined ? null : new ReplayPlayer(options.replayFrames)
+    this.#recorder = this.#mode === 'play' ? new ReplayRecorder() : null
     required<HTMLElement>(this.#root, '#pause-menu').hidden = true
     this.#hitSounds = options.hitSounds ?? null
     void this.#hitSounds?.resume()
@@ -153,6 +160,8 @@ export class PlayfieldView {
     if (this.#root.hidden || this.#renderer === null || this.#session === null) return
     if (positionMS + 5 < this.#lastPositionMS && this.#beatmap !== null) {
       this.#session = new GameplaySession(this.#beatmap, { autoplay: this.#mode === 'watch', speedMultiplier })
+      this.#replay?.reset()
+      this.#recorder = this.#mode === 'play' ? new ReplayRecorder() : null
       this.#lastPpKey = ''
       this.#livePp = 0
       required<HTMLElement>(this.#root, '#play-results').hidden = true
@@ -161,7 +170,8 @@ export class PlayfieldView {
     this.#lastSpeed = speedMultiplier
     this.#lastPositionMS = positionMS
     this.#position.value = `${positionMS.toFixed(3)} ms`
-    const input = this.#input?.consume(positionMS, frameTimeStamp, speedMultiplier) ?? emptyInput(this.#lastCursor)
+    const input = this.#replay?.inputAt(positionMS) ?? this.#input?.consume(positionMS, frameTimeStamp, speedMultiplier) ?? emptyInput(this.#lastCursor)
+    this.#recorder?.record(positionMS, input)
     this.#lastCursor = input.position
     const snapshot = this.#session.update(positionMS, input)
     const ppKey = scoreKey(snapshot.score)
@@ -210,6 +220,8 @@ export class PlayfieldView {
     this.#paused = false
     this.#completed = false
     this.#failAnimation = null
+    this.#replay = null
+    this.#recorder = null
     required<HTMLElement>(this.#root, '#play-results').hidden = true
     this.#root.hidden = true
   }
@@ -228,7 +240,14 @@ export class PlayfieldView {
     results.innerHTML = `<p class="eyebrow">${heading}</p><h3>${grade} · ${String(score.score).padStart(8, '0')}</h3><dl><div><dt>300</dt><dd>${score.count300}</dd></div><div><dt>100</dt><dd>${score.count100}</dd></div><div><dt>50</dt><dd>${score.count50}</dd></div><div><dt>miss</dt><dd>${score.countMiss}</dd></div><div><dt>geki</dt><dd>${score.countGeki}</dd></div><div><dt>katu</dt><dd>${score.countKatu}</dd></div><div><dt>max combo</dt><dd>${score.maxCombo}×</dd></div><div><dt>accuracy</dt><dd>${(score.accuracy * 100).toFixed(2)}%</dd></div><div><dt>performance</dt><dd>${ppText}</dd></div><div><dt>mods</dt><dd>${modText}</dd></div><div><dt>mean error</dt><dd>${snapshot.hitErrorMean.toFixed(2)} ms</dd></div><div><dt>unstable rate</dt><dd>${snapshot.unstableRate.toFixed(2)}</dd></div><div><dt>pauses</dt><dd>${snapshot.pauseCount}</dd></div></dl><div class="ranking-actions"><button type="button" data-ranking-action="retry">Retry</button><button type="button" data-ranking-action="back">Back</button></div>`
     required<HTMLButtonElement>(results, '[data-ranking-action="retry"]').onclick = () => this.#retry()
     required<HTMLButtonElement>(results, '[data-ranking-action="back"]').onclick = () => this.#quit()
-    this.#callbacks.onComplete({ snapshot, grade, pp: this.#livePp, failed, interactive: this.#mode === 'play' })
+    this.#callbacks.onComplete({
+      snapshot,
+      grade,
+      pp: this.#livePp,
+      failed,
+      interactive: this.#mode === 'play',
+      replayFrames: this.#recorder?.frames(),
+    })
   }
 
   #setPaused(paused: boolean): void {
@@ -245,6 +264,8 @@ export class PlayfieldView {
     this.#completed = false
     this.#failAnimation = null
     this.#session = new GameplaySession(this.#beatmap, { autoplay: this.#mode === 'watch', speedMultiplier: this.#lastSpeed })
+    this.#replay?.reset()
+    this.#recorder = this.#mode === 'play' ? new ReplayRecorder() : null
     this.#lastPositionMS = Number.NEGATIVE_INFINITY
     this.#lastPpKey = ''
     this.#livePp = 0

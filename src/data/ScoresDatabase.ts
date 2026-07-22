@@ -1,5 +1,6 @@
 import { calculateGrade, type Grade } from '../core/Grade.ts'
 import { OsuFile, OsuFileFormatError } from './OsuFile.ts'
+import type { ReplayFrame } from '../core/Replay.ts'
 
 export type ScoresDatabaseFormat = 'stable' | 'mcosu'
 export type LocalScoreSource = ScoresDatabaseFormat | 'browser'
@@ -28,6 +29,7 @@ export interface LocalScore {
   readonly speedMultiplier: number
   readonly importedLegacy: boolean
   readonly sourceOrder: number
+  readonly replayFrames?: readonly ReplayFrame[]
 }
 
 export interface ScoresDatabaseResult {
