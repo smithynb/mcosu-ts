@@ -1,5 +1,7 @@
 # mcosu-ts
 
+> A for-fun slop fork, made mostly for the hell of it. Inspired by Bun rewriting a chunk of itself in Rust — figured, why not port osu! bits to TypeScript. Expect jank. 🎈
+
 `mcosu-ts` is a browser-first TypeScript port for reading and playing an existing osu!stable song library, with an optional Tauri desktop shell. It asks you to select the osu! installation folder, reads `osu!.db` locally, and displays a searchable list of osu!standard beatmaps. If the database is missing or unusable, it automatically scans metadata from `Songs/*/*.osu`. No files are uploaded.
 
 ## Browser support
